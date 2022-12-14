@@ -1,13 +1,15 @@
 include_defs('//lib/maven.defs')
 
+VERS_WD = '3.6.2.201501210735-r_WDv1'
 VERS = '3.6.2.201501210735-r'
 
 maven_jar(
   name = 'jgit',
-  id = 'org.eclipse.jgit:org.eclipse.jgit:' + VERS,
-  bin_sha1 = '47d59dffb5f02470ccfb6c1a5a31b6040a1636e5',
-  src_sha1 = '52e133360f2c38046de262c827dfec8ec5b7c885',
+  id = 'org.eclipse.jgit:org.eclipse.jgit:' + VERS_WD,
+  bin_sha1 = '8219c2e8437adad647cc84d44f20544ff03998f1',
+  src_sha1 = 'd702393e47f2b4a643973e64adc96935dfbc8656',
   license = 'jgit',
+  repository = 'http://artifacts.wandisco.com:8081/artifactory/libs-release-local',
   unsign = True,
   deps = [':ewah'],
   exclude = [
@@ -74,5 +76,6 @@ genrule(
     'org/eclipse/jgit/diff/Edit.java;' +
     'cd $TMP;' +
     'zip -Dq $OUT org/eclipse/jgit/diff/Edit.java',
+  srcs = [genfile('jgit/org.eclipse.jgit-%s-src.jar' % VERS_WD)],
   out = 'edit-src.jar',
 )

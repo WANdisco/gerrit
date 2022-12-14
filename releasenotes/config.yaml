@@ -1,0 +1,21 @@
+template: |
+          # Remove sections you don't need.
+          prelude: >
+
+          features:
+            -
+          issues:
+            -
+          upgrade:
+            -
+          deprecations:
+            -
+          critical:
+            -
+          security:
+            -
+          fixes:
+            -
+          other:
+            -
+encoding: utf8
