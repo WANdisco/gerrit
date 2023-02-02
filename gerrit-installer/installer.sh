@@ -192,12 +192,25 @@ function set_property() {
   echo "$1=$2" >> "$TMP_APPLICATION_PROPERTIES"
 }
 
+## Remove a property in TMP_APPLICATION_PROPERTIES
+function remove_property() {
+  local tmp_file="$TMP_APPLICATION_PROPERTIES.tmp"
+  for var in "$@"; do
+    ## The property must have the .'s escaped when we delete them, or they'll match
+    ## against any character
+    local escaped_property=$(echo "$var" | sed 's/\./\\./g')
+    ## Remove the property
+    sed -e "/^$escaped_property=/ d" "$TMP_APPLICATION_PROPERTIES" > "$tmp_file" && mv "$tmp_file" "$TMP_APPLICATION_PROPERTIES"
+  done
+}
+
 ## With the GitMS root location, we can look up a lot of information
 ## and avoid asking the user questions
 function fetch_config_from_application_properties() {
   SSL_ENABLED=$(fetch_property "ssl.enabled")
   GERRIT_ENABLED=$(fetch_property "gerrit.enabled")
   GERRIT_ROOT=$(fetch_property "gerrit.root")
+  GERRIT_USERNAME=$(fetch_property "gerrit.username")
   GERRIT_RPGROUP_ID=$(fetch_property "gerrit.rpgroupid")
   GERRIT_REPO_HOME=$(fetch_property "gerrit.repo.home")
   GERRIT_EVENTS_PATH=$(fetch_property "gerrit.events.basepath")
@@ -297,7 +310,7 @@ function get_executable() {
   done
 }
 
-## Reats input until the user specifies a string which is not empty
+## Reads input until the user specifies a string which is not empty
 ## $1: The string to display
 ## $2: Set to "true" to allow an empty imput
 function get_string() {
@@ -554,13 +567,11 @@ function replicated_upgrade() {
   info " Non-fastforward updates, the configuration of any added repositories have denyNonFastForward = true"
   info " set in their config. This must now be changed for all repos."
   info ""
-  info " Do you want to scan for repositories that will need to have their config updated?"
-  info " "
 
   local scan_repos
 
   if [ ! "$NON_INTERACTIVE" == "1" ]; then
-    scan_repos=$(get_boolean "Scan for repos that need configuration updates?" "true")
+    scan_repos=$(get_boolean "Do you want to scan for repositories that will need their configuration updated?" "true")
   else
     if [ "$UPDATE_REPO_CONFIG" == "true" ]; then
       scan_repos="true"
@@ -616,69 +627,70 @@ function scan_repos() {
   bold " Scanning for repositories in $GERRIT_GIT_BASE"
   info ""
 
-  find "$GERRIT_GIT_BASE" -type d -name '*.git' | while read repoPath; do
+  for repoPath in `find "$GERRIT_GIT_BASE" -type d -name '*.git'`; do
     pushd ./ > /dev/null 2>&1
       cd "$repoPath"
       local replicated
       local denyNonFastForward
       replicated=$(git config core.replicated)
-      denyNonFastForward=$(git config receive.denyNonFastForward)
+      denyNonFastForward=$(git config receive.denyNonFastForwards)
       if [[ "$replicated" == "true" && "$denyNonFastForward" == "true" ]]; then
-        REPO_LIST+=('$repoPath')
+        REPO_LIST+=("${repoPath}")
       fi
     popd > /dev/null 2>&1
   done
 
-  declare -i size=${#REPO_LIST[@]}+1
+  declare -i size=${#REPO_LIST[@]}
 
-  info " Found \033[1m${size}\033[0m repos that must have their configuration updated."
+  if [[ "${size}" -gt "0" ]]; then
+    info " Found \033[1m${size}\033[0m repositories that must have their configuration updated."
 
-  if [ ! "$NON_INTERACTIVE" == "1" ]; then
-    list_repos=$(get_boolean "List repos?" "true")
-    if [ "$list_repos" == "true" ]; then
-      for entry in ${REPO_LIST[@]}; do
-        info " $entry"
-      done
+    if [ ! "$NON_INTERACTIVE" == "1" ]; then
+      list_repos=$(get_boolean "Would you like to list the affected repositories?" "true")
+      if [ "$list_repos" == "true" ]; then
+        for entry in ${REPO_LIST[@]}; do
+          info " $entry"
+        done
+      fi
     fi
-  fi
 
-  if [ ! "$NON_INTERACTIVE" == "1" ]; then
-    update_repos=$(get_boolean "Update configuration for detected repositories?" "true")
-  else
-    if [ "$UPDATE_REPO_CONFIG" == "true" ]; then
-      update_repos="true"
-    else
-      update_repos="false"
-    fi
-  fi
-
-  if [ "$update_repos" == "true" ]; then
-
-    ## make sure that GitMS is online
-    if ! is_gitms_running; then
+    if [ ! "$NON_INTERACTIVE" == "1" ]; then
       info ""
-      info " \033[1mERROR:\033[0m GitMS must be running to modify repository configuration"
-      info ""
-      return -1
-    fi
-
-    ## need to get the GitMS Username and password
-    local username=$(get_string "GitMS Admin Username")
-    get_password "GitMS Admin Password"
-    local password="$USER_PASSWORD"
-
-    if [ "$SSL_ENABLED" == "true" ]; then
-      local protocol="https://"
-      local rest_port="$GITMS_SSL_REST_PORT"
+      update_repos=$(get_boolean "Update configuration for detected repositories now?" "true")
     else
-      local protocol="http://"
-      local rest_port="$GITMS_REST_PORT"
+      if [ "$UPDATE_REPO_CONFIG" == "true" ]; then
+        update_repos="true"
+      else
+        update_repos="false"
+      fi
     fi
 
+    if [ "$update_repos" == "true" ]; then
 
-    declare -i count=1
-    declare -i spin_count=1
-    local xml="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?> \
+      ## make sure that GitMS is online
+      if ! is_gitms_running; then
+        info ""
+        info " \033[1mERROR:\033[0m GitMS must be running to modify repository configuration"
+        info ""
+        return -1
+      fi
+
+      ## need to get the GitMS Username and password
+      local username=$(get_string "GitMS Admin Username")
+      get_password "GitMS Admin Password"
+      local password="$USER_PASSWORD"
+
+      if [ "$SSL_ENABLED" == "true" ]; then
+        local protocol="https://"
+        local rest_port="$GITMS_SSL_REST_PORT"
+      else
+        local protocol="http://"
+        local rest_port="$GITMS_REST_PORT"
+      fi
+
+      declare -i count=1
+      declare -i spin_count=1
+      local xml="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?> \
                   <git-config-properties> \
                     <config> \
                       <section>receive</section> \
@@ -687,27 +699,34 @@ function scan_repos() {
                     </config> \
                   </git-config-properties>"
 
-    for repoPath in ${REPO_LIST[@]}; do
-      ## wrap the spinner
-      if [ $spin_count -gt 3 ]; then
-        spin_count=0
-      fi
-      local line="Updating Config: ${count}/${size}"
-      echo -en "${SPINNER[$count]} ${line}\033[0K\r"
-      local encodedRepoPath=$(urlencode "$repoPath")
-       curl -X PUT --silent \
-      -H "Content-Type:application/xml" \
-      -u "${username}:${password}" \
-      --data "$xml" \
-      "${protocol}127.0.0.1:${rest_port}/api/repository/update-config?path=${encodedRepoPath}"
-      sleep 0.2
-      count+=1
-      spin_count+=1
-    done
+      local line
 
-    echo -e "${line}"
+      for repoPath in ${REPO_LIST[@]}; do
+        ## wrap the spinner
+        if [ $spin_count -gt 3 ]; then
+          spin_count=0
+        fi
+        line="Updating Config: ${count}/${size}"
+        echo -en "${SPINNER[$count]} ${line}\033[0K\r"
+        local encodedRepoPath=$(urlencode "$repoPath")
+         curl -X PUT --silent \
+        -H "Content-Type:application/xml" \
+        -u "${username}:${password}" \
+        --data "$xml" \
+        "${protocol}127.0.0.1:${rest_port}/api/repository/update-config?path=${encodedRepoPath}"
+        sleep 0.2
+        count+=1
+        spin_count+=1
+      done
+
+      echo -e "${line}"
+      info ""
+      bold " Configuration updates complete"
+      info ""
+    fi
+  else
     info ""
-    bold " Configuration updates complete"
+    bold " None of the repositories require a configuration change."
     info ""
   fi
 
@@ -820,6 +839,24 @@ function get_config_from_user() {
     info " \033[1mWARNING:\033[0m Looks like Gerrit is currently running"
     info ""
   fi
+
+  if [ ! "$NON_INTERACTIVE" == "1" ]; then
+    if [ -n "$GERRIT_USERNAME" ]; then
+      info ""
+      bold " Gerrit Admin Username and Password"
+      info ""
+      REMOVE_UNAME_AND_PASSWD=$(get_boolean "It is no longer necessary to keep your Gerrit Admin Username or Password. Would you like to remove them?" "true")
+      if [ "$REMOVE_UNAME_AND_PASSWD" == "true" ]; then
+        remove_property "gerrit.username" "gerrit.password"
+      else
+        info " Not removing Gerrit Admin Username and Password."
+
+      fi
+    fi
+  else
+    remove_property "gerrit.username" "gerrit.password"
+  fi
+  info
 
   if [ -z "$GERRIT_REPO_HOME" ]; then
     get_directory "Gerrit Repository Directory" "false"
@@ -1319,7 +1356,7 @@ GERRITMS_INSTALL_DOC="http://docs.wandisco.com/git/gerrit/1.7/gerrit_install.htm
 ## version, but can skip minor versions. This is not a hard and fast rule however, as the reality of when an
 ## upgrade can be safely skipped is down to Gerrit upgrade behaviour. This should have all the release versions
 ## of the previous major version number, and any release versions of the current major version number.
-PREVIOUS_ALLOWED_RP_GERRIT_VERSIONS=("v2.10.6-RP-1.6.0.1")
+PREVIOUS_ALLOWED_RP_GERRIT_VERSIONS=("v2.10.6-RP-1.6.0.1", "v2.10.6-RP-1.6.0.2")
 REPLICATED_UPGRADE="false"
 SPINNER=("|" "/" "-" "\\")
 
