@@ -32,6 +32,7 @@ import com.google.gerrit.server.events.SupplierSerializer;
 import com.google.gerrit.server.events.TopicChangedEvent;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import com.google.gwtorm.server.OrmException;
 import com.google.gwtorm.server.SchemaFactory;
 
@@ -61,7 +62,6 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ReplicatedEventsManager implements Runnable,Replicator.GerritPublishable {
   private static final Logger log = LoggerFactory.getLogger(ReplicatedEventsManager.class);
-  public static final String GERRIT_REPLICATED_EVENTS_ENABLED_SEND = "gerrit.replicated.events.enabled.send";
   public static final String GERRIT_REPLICATED_EVENTS_ENABLED_RECEIVE = "gerrit.replicated.events.enabled.receive";
   public static final String GERRIT_REPLICATED_EVENTS_RECEIVE_ORIGINAL = "gerrit.replicated.events.enabled.receive.original";
   public static final String GERRIT_REPLICATED_EVENTS_RECEIVE_DISTINCT = "gerrit.replicated.events.enabled.receive.distinct";
@@ -70,13 +70,13 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
   public static final String DEFAULT_DISTINCT_PREFIX = "REPL-";
   public static final String GERRIT_MAX_SECS_TO_WAIT_FOR_EVENT_ON_QUEUE = "gerrit.replicated.events.secs.on.queue";
   public static final String ENC = "UTF-8"; // From BaseCommand
-  public static final String DEFAULT_MAX_SECS_TO_WAIT_FOR_EVENT_ON_QUEUE = "2";
+  public static final String DEFAULT_MAX_SECS_TO_WAIT_FOR_EVENT_ON_QUEUE = "5";
   public static final String EVENTS_REPLICATION_THREAD_NAME = "EventsStreamReplication";
   public static final String DEFAULT_MS_APPLICATION_PROPERTIES="/opt/wandisco/git-multisite/replicator/properties/";
-  public static final String DAFAULT_BASE_DIR = System.getProperty("java.io.tmpdir");
+  public static final String DEFAULT_BASE_DIR = System.getProperty("java.io.tmpdir");
 
   public static final boolean internalLogEnabled = false;
-  private static long maxSecsToWaitForEventOnQueue=5;
+  private static long maxSecsToWaitForEventOnQueue;
   private static Thread eventReaderAndPublisherThread = null;
   private static File internalLogFile = null; // used for debug
   private static String distinctEventPrefix = DEFAULT_DISTINCT_PREFIX;
@@ -104,15 +104,17 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
   private final LinkedBlockingQueue<Event> queue =   new LinkedBlockingQueue<>(MAX_EVENTS);
   private final Object replicationLock = new Object();
   private static Replicator replicatorInstance = null;
+  private static Config cfg;
 
   public static synchronized ReplicatedEventsManager hookOnListeners(EventBroker changeHookRunner, SchemaFactory<ReviewDb> schemaFactory, Config config) {
 
     log.info("RE ReplicatedEvents hook called...");
 
     Replicator.setGerritConfig(config==null? new Config():config);
+    cfg = config;
 
     if (internalLogEnabled) {
-      internalLogFile = new File(new File(DAFAULT_BASE_DIR),"replEvents.log"); // used for debug
+      internalLogFile = new File(new File(DEFAULT_BASE_DIR),"replEvents.log"); // used for debug
       System.err.println("LOG FILE: "+internalLogFile);
     }
     logMe("ReplicatedEvents hook called, with "+changeHookRunner+" set",null);
@@ -147,6 +149,14 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
       instance = null;
     }
     return instance;
+  }
+
+  public synchronized void setGerritConfig(Config config) {
+    cfg = config;
+  }
+
+  public static synchronized Config getGerritConfig() {
+    return cfg;
   }
 
   private ReplicatedEventsManager(EventBroker changeHookRunner, final SchemaFactory<ReviewDb> schemaFactory) {
@@ -278,7 +288,7 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
    * aimed at receiving the event to be published
    *
    * @param newEvent
-   * @return
+   * @return result
    */
   @Override
   public boolean publishIncomingReplicatedEvents(EventWrapper newEvent) {
@@ -287,6 +297,12 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
       try {
         Class<?> eventClass = Class.forName(newEvent.className);
         Event originalEvent = (Event) gson.fromJson(newEvent.event, eventClass);
+
+        if (originalEvent == null) {
+          log.error("fromJson method returned null for {}", newEvent.toString());
+          return false;
+        }
+
         log.debug("RE Original event: {}",originalEvent.toString());
         originalEvent.replicated = true;
 
@@ -307,10 +323,14 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
       } catch(ClassNotFoundException e) {
         log.error("RE event has been lost. Could not find {} for event {}",newEvent.className, newEvent, e);
         result = false;
+      } catch (JsonSyntaxException je) {
+        log.error("PR Could not decode json event {}", newEvent.toString(), je);
+        return result;
       } catch(RuntimeException e) {
         log.error("RE event has been lost. Could not rebuild event for {}", newEvent, e);
         result = false;
       }
+
     }
     return result;
   }
@@ -319,7 +339,7 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
    * Publishes the event calling the postEvent function in ChangeHookRunner
    *
    * @param newEvent
-   * @return
+   * @return result
    */
   private boolean publishIncomingReplicatedEvents(Event newEvent) {
     ChangeEventInfo changeEventInfo = getChangeEventInfo(newEvent);
@@ -403,7 +423,7 @@ public final class ReplicatedEventsManager implements Runnable,Replicator.Gerrit
    *
    * @param changeEvent
    * @param prefix
-   * @return
+   * @return result
    * @throws ClassNotFoundException
    */
   @SuppressWarnings("UseSpecificCatch")
