@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +30,7 @@ package com.google.gerrit.server.account;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
+import com.google.gerrit.common.ReplicatedCacheManager;
 import com.google.gerrit.reviewdb.client.Account;
 import com.google.gerrit.reviewdb.client.AccountExternalId;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -66,8 +80,14 @@ public class AccountByEmailCacheImpl implements AccountByEmailCache {
   AccountByEmailCacheImpl(
       @Named(CACHE_NAME) LoadingCache<String, Set<Account.Id>> cache) {
     this.cache = cache;
+
+    attachToReplication();
   }
 
+  final void attachToReplication() {
+    ReplicatedCacheManager.watchCache(CACHE_NAME, this.cache);
+  }
+  
   @Override
   public Set<Account.Id> get(final String email) {
     try {
@@ -82,6 +102,7 @@ public class AccountByEmailCacheImpl implements AccountByEmailCache {
   public void evict(final String email) {
     if (email != null) {
       cache.invalidate(email);
+      ReplicatedCacheManager.replicateEvictionFromCache(CACHE_NAME,email);
     }
   }
 
