@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +35,7 @@ import com.google.gerrit.reviewdb.client.SystemConfig;
 import com.google.gerrit.reviewdb.server.ReviewDb;
 import com.google.gerrit.server.schema.SchemaCreator;
 import com.google.gerrit.server.schema.SchemaVersion;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gwtorm.jdbc.Database;
 import com.google.gwtorm.jdbc.SimpleDataSource;
 import com.google.gwtorm.server.OrmException;
@@ -113,7 +127,7 @@ public class InMemoryDatabase implements SchemaFactory<ReviewDb> {
       created = true;
       try (ReviewDb c = open()) {
         schemaCreator.create(c);
-      } catch (IOException | ConfigInvalidException e) {
+      } catch (IOException | ConfigInvalidException | PreconditionFailedException e) {
         throw new OrmException("Cannot create in-memory database", e);
       }
     }

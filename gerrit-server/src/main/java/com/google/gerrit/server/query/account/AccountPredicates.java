@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2016 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,15 +49,23 @@ public class AccountPredicates {
   static Predicate<AccountState> defaultPredicate(String query) {
     // Adapt the capacity of this list when adding more default predicates.
     List<Predicate<AccountState>> preds = Lists.newArrayListWithCapacity(3);
-    Integer id = Ints.tryParse(query);
-    if (id != null) {
-      preds.add(id(new Account.Id(id)));
+
+    // If query is set to * then return all active users , else use standard query
+    if (query.equals("*")) {
+      preds.add(Predicate.not(username(query)));
+      preds.add(isActive());
+      return Predicate.and(preds);
+    } else {
+      Integer id = Ints.tryParse(query);
+      if (id != null) {
+        preds.add(id(new Account.Id(id)));
+      }
+      preds.add(equalsName(query));
+      preds.add(username(query));
+      // Adapt the capacity of the "predicates" list when adding more default
+      // predicates.
+      return Predicate.or(preds);
     }
-    preds.add(equalsName(query));
-    preds.add(username(query));
-    // Adapt the capacity of the "predicates" list when adding more default
-    // predicates.
-    return Predicate.or(preds);
   }
 
   static Predicate<AccountState> id(Account.Id accountId) {
