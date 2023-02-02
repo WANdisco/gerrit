@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2013 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +29,7 @@ package com.google.gerrit.server.restapi.project;
 
 import static com.google.gerrit.reviewdb.client.RefNames.isConfigRef;
 
+import com.google.common.base.Strings;
 import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.extensions.api.projects.BranchInfo;
 import com.google.gerrit.extensions.api.projects.BranchInput;
@@ -91,7 +105,10 @@ public class CreateBranch
     if (input.ref != null && !ref.equals(input.ref)) {
       throw new BadRequestException("ref must match URL");
     }
-    if (input.revision == null) {
+    if (input.revision != null) {
+      input.revision = input.revision.trim();
+    }
+    if (Strings.isNullOrEmpty(input.revision)) {
       input.revision = Constants.HEAD;
     }
     while (ref.startsWith("/")) {
@@ -121,7 +138,7 @@ public class CreateBranch
         try {
           object = rw.parseCommit(object);
         } catch (IncorrectObjectTypeException notCommit) {
-          throw new BadRequestException("\"" + input.revision + "\" not a commit");
+          throw new BadRequestException("\"" + input.revision + "\" not a commit", notCommit);
         }
       }
 
@@ -191,10 +208,11 @@ public class CreateBranch
         return info;
       } catch (IOException err) {
         logger.atSevere().withCause(err).log("Cannot create branch \"%s\"", name);
-        throw err;
+        String branchError = "Cannot create branch \"" + name + "\"";
+        throw new IOException(branchError + ". " + err.getMessage());
       }
     } catch (RefUtil.InvalidRevisionException e) {
-      throw new BadRequestException("invalid revision \"" + input.revision + "\"");
+      throw new BadRequestException("invalid revision \"" + input.revision + "\"", e);
     }
   }
 }

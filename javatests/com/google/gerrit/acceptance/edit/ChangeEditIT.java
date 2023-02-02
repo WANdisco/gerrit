@@ -53,6 +53,7 @@ import com.google.gerrit.extensions.common.FileInfo;
 import com.google.gerrit.extensions.restapi.AuthException;
 import com.google.gerrit.extensions.restapi.BinaryResult;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
+import com.google.gerrit.reviewdb.client.Patch;
 import com.google.gerrit.reviewdb.client.PatchSet;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -156,8 +157,11 @@ public class ChangeEditIT extends AbstractDaemonTest {
   public void publishEdit() throws Exception {
     createArbitraryEditFor(changeId);
 
+    AddReviewerInput in = new AddReviewerInput();
+    in.reviewer = user.email;
+    gApi.changes().id(changeId).addReviewer(in);
+
     PublishChangeEditInput publishInput = new PublishChangeEditInput();
-    publishInput.notify = NotifyHandling.NONE;
     gApi.changes().id(changeId).edit().publish(publishInput);
 
     assertThat(getEdit(changeId)).isAbsent();
@@ -174,8 +178,10 @@ public class ChangeEditIT extends AbstractDaemonTest {
     assertThat(info.messages).isNotEmpty();
     assertThat(Iterables.getLast(info.messages).tag)
         .isEqualTo(ChangeMessagesUtil.TAG_UPLOADED_PATCH_SET);
+    assertThat(sender.getMessages()).isNotEmpty();
 
     // Move the change to WIP, repeat, and verify.
+    sender.clear();
     gApi.changes().id(changeId).setWorkInProgress();
     createEmptyEditFor(changeId);
     gApi.changes().id(changeId).edit().modifyFile(FILE_NAME, RawInputUtil.create(CONTENT_NEW2));
@@ -184,6 +190,7 @@ public class ChangeEditIT extends AbstractDaemonTest {
     assertThat(info.messages).isNotEmpty();
     assertThat(Iterables.getLast(info.messages).tag)
         .isEqualTo(ChangeMessagesUtil.TAG_UPLOADED_WIP_PATCH_SET);
+    assertThat(sender.getMessages()).isEmpty();
   }
 
   @Test
@@ -315,6 +322,19 @@ public class ChangeEditIT extends AbstractDaemonTest {
   }
 
   @Test
+  public void updateCommitMessageByEditingMagicCommitMsgFile() throws Exception {
+    createEmptyEditFor(changeId);
+    String updatedCommitMsg = "Foo Bar\n\nChange-Id: " + changeId + "\n";
+    gApi.changes()
+        .id(changeId)
+        .edit()
+        .modifyFile(Patch.COMMIT_MSG, RawInputUtil.create(updatedCommitMsg.getBytes(UTF_8)));
+    assertThat(getEdit(changeId)).isPresent();
+    ensureSameBytes(
+        getFileContentOfEdit(changeId, Patch.COMMIT_MSG), updatedCommitMsg.getBytes(UTF_8));
+  }
+
+  @Test
   @TestProjectInput(createEmptyCommit = false)
   public void updateRootCommitMessage() throws Exception {
     // Re-clone empty repo; TestRepository doesn't let us reset to unborn head.
@@ -329,6 +349,33 @@ public class ChangeEditIT extends AbstractDaemonTest {
     gApi.changes().id(changeId).edit().modifyCommitMessage(msg);
     String commitMessage = gApi.changes().id(changeId).edit().getCommitMessage();
     assertThat(commitMessage).isEqualTo(msg);
+  }
+
+  @Test
+  public void updateMessageEditChangeIdShouldThrowResourceConflictException() throws Exception {
+    createEmptyEditFor(changeId);
+    String commitMessage = gApi.changes().id(changeId).edit().getCommitMessage();
+
+    exception.expect(ResourceConflictException.class);
+    exception.expectMessage("wrong Change-Id footer");
+    gApi.changes()
+        .id(changeId)
+        .edit()
+        .modifyCommitMessage(commitMessage.replaceAll(changeId, changeId2));
+  }
+
+  @Test
+  public void updateMessageEditRemoveChangeIdShouldThrowResourceConflictException()
+      throws Exception {
+    createEmptyEditFor(changeId);
+    String commitMessage = gApi.changes().id(changeId).edit().getCommitMessage();
+
+    exception.expect(ResourceConflictException.class);
+    exception.expectMessage("missing Change-Id footer");
+    gApi.changes()
+        .id(changeId)
+        .edit()
+        .modifyCommitMessage(commitMessage.replaceAll("(Change-Id:).*", ""));
   }
 
   @Test

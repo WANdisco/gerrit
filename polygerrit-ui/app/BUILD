@@ -45,16 +45,6 @@ filegroup(
     ),
 )
 
-filegroup(
-    name = "bower_components",
-    srcs = glob(
-        [
-            "bower_components/**/*.html",
-            "bower_components/**/*.js",
-        ],
-    ),
-)
-
 genrule2(
     name = "pg_code_zip",
     srcs = [":pg_code"],
@@ -143,7 +133,9 @@ DIRECTORIES = [
     tags = [
         # Should not run sandboxed.
         "local",
+        "manual",
         "template",
+        "disabled"
     ],
 ) for directory in DIRECTORIES]
 

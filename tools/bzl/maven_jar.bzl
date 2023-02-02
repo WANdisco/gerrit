@@ -8,6 +8,8 @@ MAVEN_LOCAL = "MAVEN_LOCAL:"
 
 ECLIPSE = "ECLIPSE:"
 
+WANDISCO_ASSETS = "WANDISCO:"
+
 def _maven_release(ctx, parts):
     """induce jar and url name from maven coordinates."""
     if len(parts) not in [3, 4]:
@@ -74,6 +76,7 @@ def _generate_build_files(ctx, binjar, srcjar):
         srcjar_attr = 'srcjar = "%s",' % srcjar
     contents = """
 {header}
+load("@rules_java//java:defs.bzl", "java_import")
 package(default_visibility = ['//visibility:public'])
 java_import(
     name = 'jar',

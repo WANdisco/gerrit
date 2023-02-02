@@ -418,7 +418,7 @@ public class RestApiServlet extends HttpServlet {
             if (isPost(req) || isPut(req)) {
               RestView<RestResource> createView = c.views().get(PluginName.GERRIT, "CREATE./");
               if (createView != null) {
-                viewData = new ViewData(null, createView);
+                viewData = new ViewData(viewData.pluginName, createView);
                 status = SC_CREATED;
                 path.add(id);
               } else {
@@ -428,7 +428,7 @@ public class RestApiServlet extends HttpServlet {
               RestView<RestResource> deleteView =
                   c.views().get(PluginName.GERRIT, "DELETE_MISSING./");
               if (deleteView != null) {
-                viewData = new ViewData(null, deleteView);
+                viewData = new ViewData(viewData.pluginName, deleteView);
                 status = SC_NO_CONTENT;
                 path.add(id);
               } else {
@@ -544,6 +544,7 @@ public class RestApiServlet extends HttpServlet {
           }
         }
       } catch (MalformedJsonException | JsonParseException e) {
+        logger.atFine().withCause(e).log("REST call failed on JSON parsing");
         responseBytes =
             replyError(
                 req, res, status = SC_BAD_REQUEST, "Invalid " + JSON_TYPE + " in request", e);
@@ -875,7 +876,7 @@ public class RestApiServlet extends HttpServlet {
           try {
             first = json.peek();
           } catch (EOFException e) {
-            throw new BadRequestException("Expected JSON object");
+            throw new BadRequestException("Expected JSON object", e);
           }
           if (first == JsonToken.STRING) {
             return parseString(json.nextString(), type);
@@ -1289,7 +1290,7 @@ public class RestApiServlet extends HttpServlet {
     for (String p : Splitter.on('/').split(path)) {
       out.add(IdString.fromUrl(p));
     }
-    if (out.size() > 0 && out.get(out.size() - 1).isEmpty()) {
+    if (!out.isEmpty() && out.get(out.size() - 1).isEmpty()) {
       out.remove(out.size() - 1);
     }
     return out;
@@ -1351,9 +1352,7 @@ public class RestApiServlet extends HttpServlet {
     // generated.
     TraceContext traceContext =
         TraceContext.newTrace(
-            doTrace,
-            traceId1,
-            (tagName, traceId) -> res.setHeader(X_GERRIT_TRACE, traceId.toString()));
+            doTrace, traceId1, (tagName, traceId) -> res.setHeader(X_GERRIT_TRACE, traceId));
     // If a second trace ID was specified, add a tag for it as well.
     if (traceId2 != null) {
       traceContext.addTag(RequestId.Type.TRACE_ID, traceId2);
@@ -1443,7 +1442,7 @@ public class RestApiServlet extends HttpServlet {
     checkArgument(statusCode >= 400, "non-error status: %s", statusCode);
     res.setStatus(statusCode);
     logger.atFinest().withCause(err).log("REST call failed: %d", statusCode);
-    return replyText(req, res, true, msg);
+    return replyText(req, res, true, msg, err);
   }
 
   /**
@@ -1454,18 +1453,39 @@ public class RestApiServlet extends HttpServlet {
    * @param allowTracing whether it is allowed to log the reply if tracing is enabled, must not be
    *     set to {@code true} if the reply may contain sensitive data
    * @param text the text reply
+   * @param err the error that may have occurred
    * @return the length of the response
    * @throws IOException
    */
   static long replyText(
-      @Nullable HttpServletRequest req, HttpServletResponse res, boolean allowTracing, String text)
+      @Nullable HttpServletRequest req, HttpServletResponse res, boolean allowTracing, String text, Throwable err)
       throws IOException {
     if ((req == null || isRead(req)) && isMaybeHTML(text)) {
       return replyJson(
           req, res, allowTracing, ImmutableListMultimap.of("pp", "0"), new JsonPrimitive(text));
     }
+
+    // Sometimes the err can contain much more useful information but it
+    // can also be the same as text message but with class info as a prefix
+    // only report the error if it is different.
+    boolean duplicate = false;
+    String errorMessage = err.getMessage();
+
+    if (!Strings.isNullOrEmpty(errorMessage) && errorMessage.endsWith(text)){
+      duplicate = true;
+    }
+
     if (!text.endsWith("\n")) {
       text += "\n";
+    }
+
+    if (!Strings.isNullOrEmpty(errorMessage) && !duplicate){
+      // report any additional errors
+      text += String.format("Error details : %s\n", errorMessage);
+
+      if (err.getCause() != null && !Strings.isNullOrEmpty(err.getCause().getMessage())){
+        text += String.format("Cause : %s\n", err.getCause().getMessage());
+      }
     }
     if (allowTracing) {
       logger.atFinest().log("Text response body:\n%s", text);

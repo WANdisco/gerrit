@@ -109,6 +109,13 @@ Migration requires a heap size comparable to running a Gerrit server. If you
 normally run `gerrit.war daemon` with an `-Xmx` flag, pass that to the migration
 tool as well.
 
+[NOTE]
+Note that by appending `--reindex false` to the above command, you can skip the
+lengthy, implicit reindexing step of the migration. This is useful if you plan
+to perform further Gerrit upgrades while the server is offline and have to
+reindex later anyway (E.g.: a follow-up upgrade to Gerrit 3.2 or newer, which
+requires to reindex changes anyway).
+
 *Advantages*
 
 * Much faster than online; can use all available CPUs, since no live traffic
@@ -192,3 +199,10 @@ section serves primarily as a reference.
   of all changes in NoteDb is accurate, and so is only safe once all changes are
   NoteDb primary. Otherwise, reading changes only from NoteDb might result in
   inaccurate results, and writing to NoteDb would compound the problem. +
+
+== NoteDB to ReviewDB rollback
+
+In case of rollback from NoteDB to ReviewDB, all the meta refs and the
+sequence ref need to be removed.
+The [remove-notedb-refs.sh](https://gerrit.googlesource.com/gerrit/+/refs/heads/master/contrib/remove-notedb-refs.sh)
+script has been written to automate this process.

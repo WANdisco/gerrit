@@ -46,7 +46,7 @@ public class Sequences {
   public static final String NAME_CHANGES = "changes";
 
   public static int getChangeSequenceGap(Config cfg) {
-    return cfg.getInt("noteDb", "changes", "initialSequenceGap", 1000);
+    return cfg.getInt("noteDb", "changes", "initialSequenceGap", 0);
   }
 
   private enum SequenceType {
@@ -75,6 +75,10 @@ public class Sequences {
     this.db = db;
     this.migration = migration;
 
+
+    int sequenceRetryMaxTimeoutSecs = cfg.getInt("noteDb", "sequenceRetryMaxTimeoutSecs", 30);
+    RepoSequence.setSequenceRetryMaxTimeoutSecs(sequenceRetryMaxTimeoutSecs);
+
     int accountBatchSize = cfg.getInt("noteDb", "accounts", "sequenceBatchSize", 1);
     accountSeq =
         new RepoSequence(
@@ -93,11 +97,16 @@ public class Sequences {
         new RepoSequence(
             repoManager, gitRefUpdated, allProjects, NAME_CHANGES, changeSeed, changeBatchSize);
 
-    RepoSequence.Seed groupSeed = () -> nextGroupId(db.get());
-    int groupBatchSize = 1;
+    RepoSequence.Seed groupSeed = this::nextGroupId;
+    int groupBatchSize = cfg.getInt("noteDb", "groups", "sequenceBatchSize", 1);
     groupSeq =
         new RepoSequence(
-            repoManager, gitRefUpdated, allUsers, NAME_GROUPS, groupSeed, groupBatchSize);
+            repoManager,
+            gitRefUpdated,
+            allUsers,
+            NAME_GROUPS,
+            () -> ReviewDb.FIRST_GROUP_ID,
+            groupBatchSize);
 
     nextIdLatency =
         metrics.newTimer(
@@ -157,10 +166,5 @@ public class Sequences {
   @SuppressWarnings("deprecation")
   private static int nextChangeId(ReviewDb db) throws OrmException {
     return db.nextChangeId();
-  }
-
-  @SuppressWarnings("deprecation")
-  static int nextGroupId(ReviewDb db) throws OrmException {
-    return db.nextAccountGroupId();
   }
 }

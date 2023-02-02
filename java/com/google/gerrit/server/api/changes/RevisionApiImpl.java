@@ -240,7 +240,7 @@ class RevisionApiImpl implements RevisionApi {
     try {
       return review.apply(revision, in).value();
     } catch (Exception e) {
-      throw asRestApiException("Cannot post review", e);
+      throw asRestApiException("Cannot post review, conflict detected - please try again after a minute", e);
     }
   }
 
@@ -272,16 +272,6 @@ class RevisionApiImpl implements RevisionApi {
     } catch (Exception e) {
       throw asRestApiException("Cannot get submit preview", e);
     }
-  }
-
-  @Override
-  public void publish() throws RestApiException {
-    throw new UnsupportedOperationException("draft workflow is discontinued");
-  }
-
-  @Override
-  public void delete() throws RestApiException {
-    throw new UnsupportedOperationException("draft workflow is discontinued");
   }
 
   @Override

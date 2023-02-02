@@ -363,7 +363,7 @@ public class NoteDbBatchUpdate extends BatchUpdate {
             indexFutures.add(indexer.indexAsync(project, id));
             break;
           case DELETED:
-            indexFutures.add(indexer.deleteAsync(id));
+            indexFutures.add(indexer.deleteAsync(project, id));
             break;
           case SKIPPED:
             break;

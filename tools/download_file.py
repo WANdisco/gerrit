@@ -15,8 +15,8 @@
 
 from __future__ import print_function
 
+import argparse
 from hashlib import sha1
-from optparse import OptionParser
 from os import link, makedirs, path, remove
 import shutil
 from subprocess import check_call, CalledProcessError
@@ -24,6 +24,7 @@ from sys import stderr
 from util import hash_file, resolve_url
 from zipfile import ZipFile, BadZipfile, LargeZipFile
 
+CURRENT_LOCATION = path.dirname(path.realpath(__file__))
 GERRIT_HOME = path.expanduser('~/.gerritcodereview')
 CACHE_DIR = path.join(GERRIT_HOME, 'bazel-cache', 'downloaded-artifacts')
 LOCAL_PROPERTIES = 'local.properties'
@@ -43,8 +44,10 @@ def download_properties(root_dir):
     """ Get the download properties.
 
     First tries to find the properties file in the given root directory,
-    and if not found there, tries in the Gerrit settings folder in the
-    user's home directory.
+       and if not found there,
+    Second tries in the Gerrit settings folder in the user's home directory,
+       and if not found there,
+    Finally tries in the current execution path for gerrit build.
 
     Returns a set of download properties, which may be empty.
 
@@ -53,6 +56,10 @@ def download_properties(root_dir):
     local_prop = path.join(root_dir, LOCAL_PROPERTIES)
     if not path.isfile(local_prop):
         local_prop = path.join(GERRIT_HOME, LOCAL_PROPERTIES)
+    if not path.isfile(local_prop):
+        gerrit_workspace = path.join(CURRENT_LOCATION, "../", 'WORKSPACE')
+        if path.isfile(gerrit_workspace):
+          local_prop = path.join(CURRENT_LOCATION, "../", LOCAL_PROPERTIES)
     if path.isfile(local_prop):
         try:
             with open(local_prop) as fd:
@@ -75,14 +82,14 @@ def cache_entry(args):
     return path.join(CACHE_DIR, name)
 
 
-opts = OptionParser()
-opts.add_option('-o', help='local output file')
-opts.add_option('-u', help='URL to download')
-opts.add_option('-v', help='expected content SHA-1')
-opts.add_option('-x', action='append', help='file to delete from ZIP')
-opts.add_option('--exclude_java_sources', action='store_true')
-opts.add_option('--unsign', action='store_true')
-args, _ = opts.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('-o', help='local output file')
+parser.add_argument('-u', help='URL to download')
+parser.add_argument('-v', help='expected content SHA-1')
+parser.add_argument('-x', action='append', help='file to delete from ZIP')
+parser.add_argument('--exclude_java_sources', action='store_true')
+parser.add_argument('--unsign', action='store_true')
+args = parser.parse_args()
 
 root_dir = args.o
 while root_dir and path.dirname(root_dir) != root_dir:

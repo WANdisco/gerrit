@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+
 // Copyright (C) 2013 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,12 +45,18 @@ class CapabilityInfo {
   public boolean runAs;
   public boolean runGC;
   public boolean streamEvents;
+  public boolean viewAccess;
   public boolean viewAllAccounts;
   public boolean viewCaches;
   public boolean viewConnections;
   public boolean viewPlugins;
   public boolean viewQueue;
-  public boolean viewAccess;
+  public boolean viewReplicatorStats;
+
+  @Override
+  public int hashCode() {
+    return super.hashCode();
+  }
 
   static class QueryLimit {
     short min;

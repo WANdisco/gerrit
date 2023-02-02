@@ -17,6 +17,7 @@ package com.google.gerrit.pgm.http.jetty;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.gerrit.extensions.client.AuthType;
 import com.google.gerrit.extensions.events.LifecycleListener;
@@ -40,9 +41,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
+import javax.servlet.http.HttpSessionEvent;
+import javax.servlet.http.HttpSessionListener;
 import org.eclipse.jetty.http.HttpScheme;
+import org.eclipse.jetty.io.ConnectionStatistics;
 import org.eclipse.jetty.jmx.MBeanContainer;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.ForwardedRequestCustomizer;
@@ -67,7 +72,6 @@ import org.eclipse.jetty.util.BlockingArrayQueue;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
-import org.eclipse.jetty.util.thread.ThreadPool;
 import org.eclipse.jgit.lib.Config;
 
 @Singleton
@@ -116,10 +120,91 @@ public class JettyServer {
     }
   }
 
+  static class Metrics {
+    private final QueuedThreadPool threadPool;
+    private ConnectionStatistics connStats;
+
+    Metrics(QueuedThreadPool threadPool, ConnectionStatistics connStats) {
+      this.threadPool = threadPool;
+      this.connStats = connStats;
+    }
+
+    public int getIdleThreads() {
+      return threadPool.getIdleThreads();
+    }
+
+    public int getBusyThreads() {
+      return threadPool.getBusyThreads();
+    }
+
+    public int getReservedThreads() {
+      return threadPool.getReservedThreads();
+    }
+
+    public int getMinThreads() {
+      return threadPool.getMinThreads();
+    }
+
+    public int getMaxThreads() {
+      return threadPool.getMaxThreads();
+    }
+
+    public int getThreads() {
+      return threadPool.getThreads();
+    }
+
+    public int getQueueSize() {
+      return threadPool.getQueueSize();
+    }
+
+    public boolean isLowOnThreads() {
+      return threadPool.isLowOnThreads();
+    }
+
+    public long getConnections() {
+      return connStats.getConnections();
+    }
+
+    public long getConnectionsTotal() {
+      return connStats.getConnectionsTotal();
+    }
+
+    public long getConnectionDurationMax() {
+      return connStats.getConnectionDurationMax();
+    }
+
+    public double getConnectionDurationMean() {
+      return connStats.getConnectionDurationMean();
+    }
+
+    public double getConnectionDurationStdDev() {
+      return connStats.getConnectionDurationStdDev();
+    }
+
+    public long getReceivedMessages() {
+      return connStats.getReceivedMessages();
+    }
+
+    public long getSentMessages() {
+      return connStats.getSentMessages();
+    }
+
+    public long getReceivedBytes() {
+      return connStats.getReceivedBytes();
+    }
+
+    public long getSentBytes() {
+      return connStats.getSentBytes();
+    }
+  }
+
   private final SitePaths site;
   private final Server httpd;
-
+  private final Metrics metrics;
   private boolean reverseProxy;
+  private ConnectionStatistics connStats;
+  private final SessionHandler sessionHandler;
+  private final AtomicLong sessionsCounter;
 
   @Inject
   JettyServer(
@@ -130,10 +215,35 @@ public class JettyServer {
       HttpLogFactory httpLogFactory) {
     this.site = site;
 
-    httpd = new Server(threadPool(cfg, threadSettingsConfig));
+    QueuedThreadPool pool = threadPool(cfg, threadSettingsConfig);
+    httpd = new Server(pool);
     httpd.setConnectors(listen(httpd, cfg));
+    connStats = new ConnectionStatistics();
+    for (Connector connector : httpd.getConnectors()) {
+      connector.addBean(connStats);
+    }
+    metrics = new Metrics(pool, connStats);
+    sessionHandler = new SessionHandler();
+    sessionsCounter = new AtomicLong();
 
-    Handler app = makeContext(env, cfg);
+    /* Code used for testing purposes for making assertions
+     * on the number of active HTTP sessions.
+     */
+    sessionHandler.addEventListener(
+        new HttpSessionListener() {
+
+          @Override
+          public void sessionDestroyed(HttpSessionEvent se) {
+            sessionsCounter.decrementAndGet();
+          }
+
+          @Override
+          public void sessionCreated(HttpSessionEvent se) {
+            sessionsCounter.incrementAndGet();
+          }
+        });
+
+    Handler app = makeContext(env, cfg, sessionHandler);
     if (cfg.getBoolean("httpd", "requestLog", !reverseProxy)) {
       RequestLogHandler handler = new RequestLogHandler();
       handler.setRequestLog(httpLogFactory.get());
@@ -158,6 +268,15 @@ public class JettyServer {
 
     httpd.setHandler(app);
     httpd.setStopAtShutdown(false);
+  }
+
+  @VisibleForTesting
+  public long numActiveSessions() {
+    return sessionsCounter.longValue();
+  }
+
+  Metrics getMetrics() {
+    return metrics;
   }
 
   private Connector[] listen(Server server, Config cfg) {
@@ -197,7 +316,7 @@ public class JettyServer {
         c = newServerConnector(server, acceptors, config);
 
       } else if ("https".equals(u.getScheme())) {
-        SslContextFactory ssl = new SslContextFactory();
+        SslContextFactory.Server ssl = new SslContextFactory.Server();
         final Path keystore = getFile(cfg, "sslkeystore", "etc/keystore");
         String password = cfg.getString("httpd", null, "sslkeypassword");
         if (password == null) {
@@ -339,7 +458,7 @@ public class JettyServer {
     return site.resolve(path);
   }
 
-  private ThreadPool threadPool(Config cfg, ThreadSettingsConfig threadSettingsConfig) {
+  private QueuedThreadPool threadPool(Config cfg, ThreadSettingsConfig threadSettingsConfig) {
     int maxThreads = threadSettingsConfig.getHttpdMaxThreads();
     int minThreads = cfg.getInt("httpd", null, "minthreads", 5);
     int maxQueued = cfg.getInt("httpd", null, "maxqueued", 200);
@@ -359,7 +478,7 @@ public class JettyServer {
     return pool;
   }
 
-  private Handler makeContext(JettyEnv env, Config cfg) {
+  private Handler makeContext(JettyEnv env, Config cfg, SessionHandler sessionHandler) {
     final Set<String> paths = new HashSet<>();
     for (URI u : listenURLs(cfg)) {
       String p = u.getPath();
@@ -374,7 +493,7 @@ public class JettyServer {
 
     final List<ContextHandler> all = new ArrayList<>();
     for (String path : paths) {
-      all.add(makeContext(path, env, cfg));
+      all.add(makeContext(path, env, cfg, sessionHandler));
     }
 
     if (all.size() == 1) {
@@ -392,13 +511,14 @@ public class JettyServer {
     return r;
   }
 
-  private ContextHandler makeContext(final String contextPath, JettyEnv env, Config cfg) {
+  private ContextHandler makeContext(
+      final String contextPath, JettyEnv env, Config cfg, SessionHandler sessionHandler) {
     final ServletContextHandler app = new ServletContextHandler();
 
     // This enables the use of sessions in Jetty, feature available
     // for Gerrit plug-ins to enable user-level sessions.
     //
-    app.setSessionHandler(new SessionHandler());
+    app.setSessionHandler(sessionHandler);
     app.setErrorHandler(new HiddenErrorHandler());
 
     // This is the path we are accessed by clients within our domain.

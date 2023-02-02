@@ -185,8 +185,7 @@ public class RepoSequenceTest {
         newSequence("id", 1, 3).next();
         fail();
       } catch (OrmException e) {
-        assertThat(e.getCause()).isInstanceOf(ExecutionException.class);
-        assertThat(e.getCause().getCause()).isInstanceOf(IncorrectObjectTypeException.class);
+        assertThat(e.getCause()).isInstanceOf(IncorrectObjectTypeException.class);
       }
     }
   }
@@ -210,7 +209,10 @@ public class RepoSequenceTest {
 
   @Test
   public void nextWithCountOneCaller() throws Exception {
-    RepoSequence s = newSequence("id", 1, 3);
+    final int batchSize = 3;
+    RepoSequence s = newSequence("id", 1, batchSize);
+    assertThat(s.batchSize).isEqualTo(batchSize);
+
     assertThat(s.next(2)).containsExactly(1, 2).inOrder();
     assertThat(s.acquireCount).isEqualTo(1);
     assertThat(s.next(2)).containsExactly(3, 4).inOrder();

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +28,7 @@
 package com.google.gerrit.server.schema;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.reviewdb.client.CurrentSchemaVersion;
 import com.google.gerrit.reviewdb.server.ReviewDb;
 import com.google.gerrit.reviewdb.server.ReviewDbUtil;
@@ -95,23 +109,25 @@ public class SchemaUpdater {
   }
 
   public void update(UpdateUI ui) throws OrmException {
+    CurrentSchemaVersion version;
+    SchemaVersion u;
     try (ReviewDb db = ReviewDbUtil.unwrapDb(schema.open())) {
-
-      final SchemaVersion u = updater.get();
-      final CurrentSchemaVersion version = getSchemaVersion(db);
+      version = getSchemaVersion(db);
+      u = updater.get();
       if (version == null) {
         try {
           creator.create(db);
         } catch (IOException | ConfigInvalidException e) {
           throw new OrmException("Cannot initialize schema", e);
         }
+      }
+    }
 
-      } else {
-        try {
-          u.check(ui, version, db);
-        } catch (SQLException e) {
-          throw new OrmException("Cannot upgrade schema", e);
-        }
+    if (version != null) {
+      try {
+        u.check(ui, version, schema);
+      } catch (SQLException e) {
+        throw new OrmException("Cannot upgrade schema", e);
       }
     }
   }

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2013 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,19 +47,14 @@ import com.google.gerrit.extensions.client.InheritableBoolean;
 import com.google.gerrit.extensions.client.SubmitType;
 import com.google.gerrit.extensions.common.ProjectInfo;
 import com.google.gerrit.extensions.events.NewProjectCreatedListener;
-import com.google.gerrit.extensions.restapi.BadRequestException;
-import com.google.gerrit.extensions.restapi.IdString;
-import com.google.gerrit.extensions.restapi.ResourceConflictException;
-import com.google.gerrit.extensions.restapi.Response;
-import com.google.gerrit.extensions.restapi.RestApiException;
-import com.google.gerrit.extensions.restapi.RestCollectionCreateView;
-import com.google.gerrit.extensions.restapi.TopLevelResource;
+import com.google.gerrit.extensions.restapi.*;
 import com.google.gerrit.reviewdb.client.AccountGroup;
 import com.google.gerrit.reviewdb.client.BooleanProjectConfig;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.client.RefNames;
 import com.google.gerrit.server.GerritPersonIdent;
 import com.google.gerrit.server.IdentifiedUser;
+import com.google.gerrit.server.UsedAt;
 import com.google.gerrit.server.account.GroupBackend;
 import com.google.gerrit.server.config.AllProjectsName;
 import com.google.gerrit.server.config.AllUsersName;
@@ -157,8 +165,9 @@ public class CreateProject
   }
 
   @Override
-  public Response<ProjectInfo> apply(TopLevelResource resource, IdString id, ProjectInput input)
-      throws RestApiException, IOException, ConfigInvalidException, PermissionBackendException {
+  public Response<ProjectInfo> apply(TopLevelResource resource, IdString id,
+                                     ProjectInput input) throws
+      RestApiException, IOException, ConfigInvalidException, PermissionBackendException {
     String name = id.get();
     if (input == null) {
       input = new ProjectInput();
@@ -240,9 +249,14 @@ public class CreateProject
     }
   }
 
-  // TODO(dpursehouse): Add @UsedAt annotation
+  @UsedAt(UsedAt.Project.COLLABNET)
   public ProjectState createProject(CreateProjectArgs args)
-      throws BadRequestException, ResourceConflictException, IOException, ConfigInvalidException {
+          throws
+          BadRequestException,
+          ResourceConflictException,
+          IOException,
+          ConfigInvalidException,
+          PreconditionFailedException {
     final Project.NameKey nameKey = args.getProject();
     try {
       final String head = args.permissionsOnly ? RefNames.REFS_CONFIG : args.branch.get(0);
@@ -269,17 +283,24 @@ public class CreateProject
         return projectCache.get(nameKey);
       }
     } catch (RepositoryCaseMismatchException e) {
+      logger.atSevere().withCause(e).log();
       throw new ResourceConflictException(
           "Cannot create "
               + nameKey.get()
               + " because the name is already occupied by another project."
               + " The other project has the same name, only spelled in a"
               + " different case.");
-    } catch (RepositoryNotFoundException badName) {
-      throw new BadRequestException("invalid project name: " + nameKey);
+    } catch (RepositoryNotFoundException e) {
+      String msg = "Repository Not Found: %s";
+      logger.atSevere().withCause(e).log(msg, nameKey);
+      throw new BadRequestException(e.getCause().getMessage());
+    } catch (PreconditionFailedException e) {
+      String msg = "Resource with the name: %s, already exists on one or more nodes.";
+      logger.atSevere().withCause(e).log(msg, nameKey);
+      throw new PreconditionFailedException(msg);
     } catch (ConfigInvalidException e) {
-      String msg = "Cannot create " + nameKey;
-      logger.atSevere().withCause(e).log(msg);
+      String msg = "Cannot create %s";
+      logger.atSevere().withCause(e).log(msg, nameKey);
       throw e;
     }
   }

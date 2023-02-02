@@ -24,16 +24,21 @@ import com.google.gerrit.server.group.db.Groups;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
 import com.google.gerrit.server.query.group.InternalGroupQuery;
+import com.google.gerrit.server.replication.ReplicatedCacheManager;
+import com.google.gerrit.server.replication.Replicator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Named;
+
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
-/** Tracks group objects in memory for efficient access. */
+/**
+ * Tracks group objects in memory for efficient access.
+ */
 @Singleton
 public class GroupCacheImpl implements GroupCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -46,15 +51,18 @@ public class GroupCacheImpl implements GroupCache {
     return new CacheModule() {
       @Override
       protected void configure() {
-        cache(BYID_NAME, AccountGroup.Id.class, new TypeLiteral<Optional<InternalGroup>>() {})
+        cache(BYID_NAME, AccountGroup.Id.class, new TypeLiteral<Optional<InternalGroup>>() {
+        })
             .maximumWeight(Long.MAX_VALUE)
             .loader(ByIdLoader.class);
 
-        cache(BYNAME_NAME, String.class, new TypeLiteral<Optional<InternalGroup>>() {})
+        cache(BYNAME_NAME, String.class, new TypeLiteral<Optional<InternalGroup>>() {
+        })
             .maximumWeight(Long.MAX_VALUE)
             .loader(ByNameLoader.class);
 
-        cache(BYUUID_NAME, String.class, new TypeLiteral<Optional<InternalGroup>>() {})
+        cache(BYUUID_NAME, String.class, new TypeLiteral<Optional<InternalGroup>>() {
+        })
             .maximumWeight(Long.MAX_VALUE)
             .loader(ByUUIDLoader.class);
 
@@ -76,6 +84,22 @@ public class GroupCacheImpl implements GroupCache {
     this.byId = byId;
     this.byName = byName;
     this.byUUID = byUUID;
+
+    attachToReplication();
+  }
+
+  /**
+   * Attach to replication the caches that this object uses.
+   * N.B. we do not need to hook in the cache listeners if replication is disabled.
+   */
+  final void attachToReplication() {
+    if(Replicator.isReplicationDisabled()){
+      return;
+    }
+
+    ReplicatedCacheManager.watchCache(BYID_NAME, this.byId);
+    ReplicatedCacheManager.watchCache(BYNAME_NAME, this.byName);
+    ReplicatedCacheManager.watchCache(BYUUID_NAME, this.byUUID);
   }
 
   @Override
@@ -120,6 +144,7 @@ public class GroupCacheImpl implements GroupCache {
     if (groupId != null) {
       logger.atFine().log("Evict group %s by ID", groupId.get());
       byId.invalidate(groupId);
+      ReplicatedCacheManager.replicateEvictionFromCache(BYID_NAME, groupId);
     }
   }
 
@@ -128,6 +153,7 @@ public class GroupCacheImpl implements GroupCache {
     if (groupName != null) {
       logger.atFine().log("Evict group '%s' by name", groupName.get());
       byName.invalidate(groupName.get());
+      ReplicatedCacheManager.replicateEvictionFromCache(BYNAME_NAME, groupName);
     }
   }
 
@@ -136,6 +162,18 @@ public class GroupCacheImpl implements GroupCache {
     if (groupUuid != null) {
       logger.atFine().log("Evict group %s by UUID", groupUuid.get());
       byUUID.invalidate(groupUuid.get());
+      ReplicatedCacheManager.replicateEvictionFromCache(BYUUID_NAME, groupUuid);
+    }
+  }
+
+  @Override
+  public void evict(AccountGroup.UUID groupUuid, boolean shouldReplicate) {
+    if (groupUuid != null) {
+      logger.atFine().log("Evict group %s by UUID", groupUuid.get());
+      byUUID.invalidate(groupUuid.get());
+      if (shouldReplicate) {
+        ReplicatedCacheManager.replicateEvictionFromCache(BYUUID_NAME, groupUuid);
+      }
     }
   }
 

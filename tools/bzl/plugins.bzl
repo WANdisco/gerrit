@@ -9,6 +9,8 @@ CORE_PLUGINS = [
 ]
 
 CUSTOM_PLUGINS = [
+    "delete-project",
+    "lfs"
     # Add custom core plugins here
 ]
 

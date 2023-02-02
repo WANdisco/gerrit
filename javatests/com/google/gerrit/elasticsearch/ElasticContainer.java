@@ -16,7 +16,10 @@ package com.google.gerrit.elasticsearch;
 
 import org.apache.http.HttpHost;
 import org.junit.AssumptionViolatedException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /* Helper class for running ES integration tests in docker container */
 public class ElasticContainer extends ElasticsearchContainer {
@@ -36,22 +39,12 @@ public class ElasticContainer extends ElasticsearchContainer {
 
   private static String getImageName(ElasticVersion version) {
     switch (version) {
-      case V5_6:
-        return "blacktop/elasticsearch:5.6.16";
-      case V6_2:
-        return "blacktop/elasticsearch:6.2.4";
-      case V6_3:
-        return "blacktop/elasticsearch:6.3.2";
-      case V6_4:
-        return "blacktop/elasticsearch:6.4.3";
-      case V6_5:
-        return "blacktop/elasticsearch:6.5.4";
       case V6_6:
         return "blacktop/elasticsearch:6.6.2";
       case V6_7:
         return "blacktop/elasticsearch:6.7.2";
       case V6_8:
-        return "blacktop/elasticsearch:6.8.2";
+        return "blacktop/elasticsearch:6.8.9";
       case V7_0:
         return "blacktop/elasticsearch:7.0.1";
       case V7_1:
@@ -60,12 +53,27 @@ public class ElasticContainer extends ElasticsearchContainer {
         return "blacktop/elasticsearch:7.2.1";
       case V7_3:
         return "blacktop/elasticsearch:7.3.2";
+      case V7_4:
+        return "blacktop/elasticsearch:7.4.2";
+      case V7_5:
+        return "blacktop/elasticsearch:7.5.2";
+      case V7_6:
+        return "blacktop/elasticsearch:7.6.2";
+      case V7_7:
+        return "blacktop/elasticsearch:7.7.0";
     }
     throw new IllegalStateException("No tests for version: " + version.name());
   }
 
   private ElasticContainer(ElasticVersion version) {
-    super(getImageName(version));
+    super(
+        DockerImageName.parse(getImageName(version))
+            .asCompatibleSubstituteFor("docker.elastic.co/elasticsearch/elasticsearch"));
+  }
+
+  @Override
+  protected Logger logger() {
+    return LoggerFactory.getLogger("org.testcontainers");
   }
 
   public HttpHost getHttpHost() {
