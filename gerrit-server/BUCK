@@ -1,3 +1,16 @@
+
+#/********************************************************************************
+# * Copyright (c) 2014-2018 WANdisco
+# *
+# * Licensed under the Apache License, Version 2.0 (the "License");
+# * you may not use this file except in compliance with the License.
+# * You may obtain a copy of the License at
+# * http://www.apache.org/licenses/LICENSE-2.0
+# *
+# * Apache License, Version 2.0
+# *
+# ********************************************************************************/
+ 
 CONSTANTS_SRC = [
   'src/main/java/com/google/gerrit/server/documentation/Constants.java',
 ]
@@ -11,6 +24,16 @@ RESOURCES =  glob(['src/main/resources/**/*'])
 java_library(
   name = 'constants',
   srcs = CONSTANTS_SRC,
+  visibility = ['PUBLIC'],
+)
+
+java_library(
+  name = 'common',
+  srcs = SRCS,
+  resources = RESOURCES,
+  deps = [
+    '//lib/log:json-smart',
+  ],
   visibility = ['PUBLIC'],
 )
 
@@ -48,6 +71,7 @@ java_library(
     '//lib:protobuf',
     '//lib:tukaani-xz',
     '//lib:velocity',
+    "//lib/log:json-smart",
     '//lib/antlr:java_runtime',
     '//lib/auto:auto-value',
     '//lib/commons:codec',
