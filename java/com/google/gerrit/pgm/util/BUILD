@@ -12,10 +12,8 @@ java_library(
         "//java/com/google/gerrit/metrics/dropwizard",
         "//java/com/google/gerrit/reviewdb:server",
         "//java/com/google/gerrit/server",
-        "//java/com/google/gerrit/server:module",
         "//java/com/google/gerrit/server/cache/h2",
         "//java/com/google/gerrit/server/cache/mem",
-        "//java/com/google/gerrit/server/git/receive",
         "//java/com/google/gerrit/server/restapi",
         "//java/com/google/gerrit/server/schema",
         "//java/com/google/gerrit/util/cli",
@@ -27,6 +25,7 @@ java_library(
         "//lib/guice",
         "//lib/jgit/org.eclipse.jgit:jgit",
         "//lib/log:jsonevent-layout",
+        "//lib/log:jul-to-slf4j",
         "//lib/log:log4j",
     ],
 )

@@ -161,7 +161,11 @@ public class PutConfig implements RestModifyView<ProjectResource, ConfigInput> {
               "Cannot update " + projectName + ": " + e.getCause().getMessage());
         }
         logger.atWarning().withCause(e).log("Failed to update config of project %s.", projectName);
-        throw new ResourceConflictException("Cannot update " + projectName);
+        StringBuilder sb = new StringBuilder("Cannot update ");
+        sb.append(projectName);
+        sb.append(".\n");
+        sb.append(e.getMessage());
+        throw new ResourceConflictException(sb.toString());
       }
 
       ProjectState state = projectStateFactory.create(ProjectConfig.read(md));
@@ -175,7 +179,7 @@ public class PutConfig implements RestModifyView<ProjectResource, ConfigInput> {
           uiActions,
           views);
     } catch (RepositoryNotFoundException notFound) {
-      throw new ResourceNotFoundException(projectName.get());
+      throw new ResourceNotFoundException(projectName.get(), notFound);
     } catch (ConfigInvalidException err) {
       throw new ResourceConflictException("Cannot read project " + projectName, err);
     } catch (IOException err) {

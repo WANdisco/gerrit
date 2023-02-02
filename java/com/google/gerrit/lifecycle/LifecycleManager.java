@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,15 +43,17 @@ import java.util.List;
 /** Tracks and executes registered {@link LifecycleListener}s. */
 public class LifecycleManager {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
-
+  
   private final List<Provider<LifecycleListener>> listeners = newList();
   private final List<RegistrationHandle> handles = newList();
 
   /** Index of the last listener to start successfully; -1 when not started. */
   private int startedIndex = -1;
 
-  /**
-   * Add a handle that must be cleared during stop.
+  // use to signal to threads that it is safe to proceed.
+  private static final Object startLock = new Object();
+
+  /** Add a handle that must be cleared during stop.
    *
    * @param handle the handle to add.
    */
@@ -111,6 +126,28 @@ public class LifecycleManager {
         logger.atWarning().withCause(err).log("Failed to stop %s", obj.getClass());
       }
       startedIndex = i - 1;
+    }
+  }
+
+  public static void started() {
+    synchronized (startLock) {
+        startLock.notify();
+    }
+  }
+
+  public static void await() {
+
+    logger.atInfo().log("Waiting on startLock ...");
+
+    while (true) {
+      synchronized (startLock) {
+        try {
+          startLock.wait();
+          break;
+        } catch (InterruptedException e) {
+          logger.atWarning().withCause(e).log("startlock wait was interrupted, attempting to wait again ...");
+        }
+      }
     }
   }
 

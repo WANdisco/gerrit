@@ -230,7 +230,8 @@ public class PluginConfigFactory implements ReloadPluginListener {
       cfg.load();
     } catch (ConfigInvalidException e) {
       // This is an error in user input, don't spam logs with a stack trace.
-      logger.atWarning().log("Failed to load %s: %s", pluginConfigFile.toAbsolutePath(), e);
+      logger.atWarning().log(
+          "Failed to load %s: %s", pluginConfigFile.toAbsolutePath(), e.getMessage());
     } catch (IOException e) {
       logger.atWarning().withCause(e).log("Failed to load %s", pluginConfigFile.toAbsolutePath());
     }
@@ -373,5 +374,16 @@ public class PluginConfigFactory implements ReloadPluginListener {
   @Override
   public synchronized void onReloadPlugin(Plugin oldPlugin, Plugin newPlugin) {
     pluginConfigs.remove(oldPlugin.getName());
+  }
+
+  /**
+   * A force reload, by removing the plugin config and forcing a retrieval again.
+   *
+   * @param pluginName
+   */
+  public synchronized void forceReloadGlobalPluginConfig( final String pluginName ){
+    pluginConfigs.remove(pluginName);
+
+    getGlobalPluginConfig( pluginName );
   }
 }

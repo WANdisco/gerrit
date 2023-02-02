@@ -17,6 +17,7 @@ package com.google.gerrit.server.account;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.gerrit.server.account.externalids.ExternalId.SCHEME_USERNAME;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -77,8 +78,9 @@ public class AccountManager {
   private final boolean autoUpdateAccountActiveStatus;
   private final SetInactiveFlag setInactiveFlag;
 
+  @VisibleForTesting
   @Inject
-  AccountManager(
+  public AccountManager(
       Sequences sequences,
       @GerritServerConfig Config cfg,
       Accounts accounts,
@@ -136,6 +138,24 @@ public class AccountManager {
     try {
       Optional<ExternalId> optionalExtId = externalIds.get(who.getExternalIdKey());
       if (!optionalExtId.isPresent()) {
+        // before saying new account check if username already exists.
+        if (who.getUserName().isPresent() && who.getUserName().get() != null) {
+          optionalExtId =
+              externalIds.get(ExternalId.Key.create(SCHEME_USERNAME, who.getUserName().get()));
+
+          if (optionalExtId.isPresent()) {
+            // An inconsistency is detected in the database, having a record for scheme "username:"
+            // but no record for scheme "gerrit:". Try to recover by linking
+            // "gerrit:" identity to the existing account.
+            logger.atWarning().log(
+                "User %s already has an account; link new identity to the existing account.",
+                who.getUserName());
+            return link(optionalExtId.get().accountId(), who);
+          }
+        }
+
+
+
         // New account, automatically create and return.
         return create(who);
       }
@@ -226,7 +246,7 @@ public class AccountManager {
     if (newEmail != null && !newEmail.equals(oldEmail)) {
       ExternalId extIdWithNewEmail =
           ExternalId.create(extId.key(), extId.accountId(), newEmail, extId.password());
-      checkEmailNotUsed(extIdWithNewEmail);
+      checkEmailNotUsed(extId.accountId(), extIdWithNewEmail);
       accountUpdates.add(u -> u.replaceExternalId(extId, extIdWithNewEmail));
 
       if (oldEmail != null && oldEmail.equals(user.getAccount().getPreferredEmail())) {
@@ -236,14 +256,7 @@ public class AccountManager {
 
     if (!Strings.isNullOrEmpty(who.getDisplayName())
         && !Objects.equals(user.getAccount().getFullName(), who.getDisplayName())) {
-      accountUpdates.add(u -> u.setFullName(who.getDisplayName()));
-      if (realm.allowsEdit(AccountFieldName.FULL_NAME)) {
-        accountUpdates.add(a -> a.setFullName(who.getDisplayName()));
-      } else {
-        logger.atWarning().log(
-            "Not changing already set display name '%s' to '%s'",
-            user.getAccount().getFullName(), who.getDisplayName());
-      }
+      accountUpdates.add(a -> a.setFullName(who.getDisplayName()));
     }
 
     if (!realm.allowsEdit(AccountFieldName.USER_NAME)
@@ -278,7 +291,7 @@ public class AccountManager {
     ExternalId extId =
         ExternalId.createWithEmail(who.getExternalIdKey(), newId, who.getEmailAddress());
     logger.atFine().log("Created external Id: %s", extId);
-    checkEmailNotUsed(extId);
+    checkEmailNotUsed(newId, extId);
     ExternalId userNameExtId =
         who.getUserName().isPresent() ? createUsername(newId, who.getUserName().get()) : null;
 
@@ -353,7 +366,8 @@ public class AccountManager {
     return ExternalId.create(SCHEME_USERNAME, username, accountId);
   }
 
-  private void checkEmailNotUsed(ExternalId extIdToBeCreated) throws IOException, AccountException {
+  private void checkEmailNotUsed(Account.Id accountId, ExternalId extIdToBeCreated)
+      throws IOException, AccountException {
     String email = extIdToBeCreated.email();
     if (email == null) {
       return;
@@ -364,14 +378,18 @@ public class AccountManager {
       return;
     }
 
-    logger.atWarning().log(
-        "Email %s is already assigned to account %s;"
-            + " cannot create external ID %s with the same email for account %s.",
-        email,
-        existingExtIdsWithEmail.iterator().next().accountId().get(),
-        extIdToBeCreated.key().get(),
-        extIdToBeCreated.accountId().get());
-    throw new AccountException("Email '" + email + "' in use by another account");
+    for (ExternalId externalId : existingExtIdsWithEmail) {
+      if (externalId.accountId().get() != accountId.get()) {
+        logger.atWarning().log(
+            "Email %s is already assigned to account %s;"
+                + " cannot create external ID %s with the same email for account %s.",
+            email,
+            externalId.accountId().get(),
+            extIdToBeCreated.key().get(),
+            extIdToBeCreated.accountId().get());
+        throw new AccountException("Email '" + email + "' in use by another account");
+      }
+    }
   }
 
   private void addGroupMember(AccountGroup.UUID groupUuid, IdentifiedUser user)
@@ -386,7 +404,7 @@ public class AccountManager {
     try {
       groupsUpdate.updateGroup(groupUuid, groupUpdate);
     } catch (NoSuchGroupException e) {
-      throw new AccountException(String.format("Group %s not found", groupUuid));
+      throw new AccountException(String.format("Group %s not found", groupUuid), e);
     }
   }
 
@@ -403,16 +421,19 @@ public class AccountManager {
       throws AccountException, OrmException, IOException, ConfigInvalidException {
     Optional<ExternalId> optionalExtId = externalIds.get(who.getExternalIdKey());
     if (optionalExtId.isPresent()) {
+      logger.atInfo().log("Link another authentication identity to an existing account");
       ExternalId extId = optionalExtId.get();
       if (!extId.accountId().equals(to)) {
         throw new AccountException(
             "Identity '" + extId.key().get() + "' in use by another account");
       }
+      logger.atInfo().log("Updating existing external ID data");
       update(who, extId);
     } else {
+      logger.atInfo().log("Linking new external ID to the existing account");
       ExternalId newExtId =
           ExternalId.createWithEmail(who.getExternalIdKey(), to, who.getEmailAddress());
-      checkEmailNotUsed(newExtId);
+      checkEmailNotUsed(to, newExtId);
       accountsUpdateProvider
           .get()
           .update(
@@ -456,8 +477,8 @@ public class AccountManager {
               }
 
               if (filteredExtIdsByScheme.size() > 1
-                  || !filteredExtIdsByScheme.stream()
-                      .anyMatch(e -> e.key().equals(who.getExternalIdKey()))) {
+                  || filteredExtIdsByScheme.stream()
+                      .noneMatch(e -> e.key().equals(who.getExternalIdKey()))) {
                 u.deleteExternalIds(filteredExtIdsByScheme);
               }
             });

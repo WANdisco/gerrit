@@ -58,6 +58,7 @@ import com.google.gerrit.server.notedb.NoteDbChangeState.PrimaryStorage;
 import com.google.gerrit.server.notedb.NoteDbUpdateManager;
 import com.google.gerrit.server.notedb.NoteDbUpdateManager.MismatchedStateException;
 import com.google.gerrit.server.notedb.NotesMigration;
+import com.google.gerrit.server.replication.ReplicatedIndexEventManager;
 import com.google.gwtorm.server.OrmException;
 import com.google.gwtorm.server.SchemaFactory;
 import com.google.inject.Inject;
@@ -304,7 +305,7 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
   private final ChangeNotes.Factory changeNotesFactory;
   private final ChangeUpdate.Factory changeUpdateFactory;
   private final GitReferenceUpdated gitRefUpdated;
-  private final ListeningExecutorService changeUpdateExector;
+  private final ListeningExecutorService changeUpdateExecutor;
   private final Metrics metrics;
   private final NoteDbUpdateManager.Factory updateManagerFactory;
   private final NotesMigration notesMigration;
@@ -322,7 +323,7 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
       AllUsersName allUsers,
       ChangeIndexer indexer,
       ChangeNotes.Factory changeNotesFactory,
-      @ChangeUpdateExecutor ListeningExecutorService changeUpdateExector,
+      @ChangeUpdateExecutor ListeningExecutorService changeUpdateExecutor,
       ChangeUpdate.Factory changeUpdateFactory,
       @GerritPersonIdent PersonIdent serverIdent,
       GitReferenceUpdated gitRefUpdated,
@@ -338,7 +339,7 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
     super(repoManager, serverIdent, project, user, when);
     this.allUsers = allUsers;
     this.changeNotesFactory = changeNotesFactory;
-    this.changeUpdateExector = changeUpdateExector;
+    this.changeUpdateExecutor = changeUpdateExecutor;
     this.changeUpdateFactory = changeUpdateFactory;
     this.gitRefUpdated = gitRefUpdated;
     this.indexer = indexer;
@@ -440,7 +441,7 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
     try {
       logDebug("Executing change ops (parallel? %s)", parallel);
       ListeningExecutorService executor =
-          parallel ? changeUpdateExector : MoreExecutors.newDirectExecutorService();
+          parallel ? changeUpdateExecutor : MoreExecutors.newDirectExecutorService();
 
       tasks = new ArrayList<>(ops.keySet().size());
       try {
@@ -703,6 +704,15 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
             if (!dryrun) {
               db.commit();
             }
+
+            // If we have deleted the change, send index deletion event. But only do so when we aren't in a dry run.
+            if (!dryrun && deleted){
+              String change = id.toString();
+              int changeId = Integer.parseInt(change);
+              String projectName = project.toString();
+              ReplicatedIndexEventManager.queueReplicationIndexDeletionEvent(changeId, projectName);
+            }
+
           } else {
             logDebug("Skipping ReviewDb write since primary storage is %s", storage);
           }

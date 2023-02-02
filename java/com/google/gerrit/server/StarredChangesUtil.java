@@ -106,7 +106,7 @@ public class StarredChangesUtil {
     public abstract String label();
 
     @Override
-    public String toString() {
+    public final String toString() {
       return accountId() + SEPARATOR + label();
     }
   }
@@ -506,8 +506,9 @@ public class StarredChangesUtil {
         case FORCED:
           gitRefUpdated.fire(allUsers, u, null);
           return;
-        case NEW:
         case NO_CHANGE:
+          return;
+        case NEW:
         case FAST_FORWARD:
         case IO_FAILURE:
         case LOCK_FAILURE:
