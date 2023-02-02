@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2014 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -65,6 +78,8 @@ import org.kohsuke.args4j.Option;
 
 import java.io.IOException;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Singleton
 public class ChangeEdits implements
@@ -78,6 +93,7 @@ public class ChangeEdits implements
   private final Provider<Detail> detail;
   private final ChangeEditUtil editUtil;
   private final Post post;
+  private static final Logger log = LoggerFactory.getLogger(ChangeEdits.class);
 
   @Inject
   ChangeEdits(DynamicMap<RestView<ChangeEditResource>> views,
@@ -407,7 +423,8 @@ public class ChangeEdits implements
             rsrc.getChangeEdit(),
             rsrc.getPath(),
             input.content);
-      } catch (InvalidChangeOperationException | IOException e) {
+      } catch(InvalidChangeOperationException | IOException e) {
+        log.error("While editing",e);
         throw new ResourceConflictException(e.getMessage());
       }
       return Response.none();

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +32,7 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
 import com.google.gerrit.common.TimeUtil;
+import com.google.gerrit.common.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.extensions.client.GeneralPreferencesInfo;
 import com.google.gerrit.reviewdb.client.Account;
 import com.google.gerrit.reviewdb.client.AccountExternalId;
@@ -63,6 +77,7 @@ public class AccountCacheImpl implements AccountCache {
 
   private static final String BYID_NAME = "accounts";
   private static final String BYUSER_NAME = "accounts_byname";
+  private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
 
   public static Module module() {
     return new CacheModule() {
@@ -89,12 +104,49 @@ public class AccountCacheImpl implements AccountCache {
   @Inject
   AccountCacheImpl(@Named(BYID_NAME) LoadingCache<Account.Id, AccountState> byId,
       @Named(BYUSER_NAME) LoadingCache<String, Optional<Account.Id>> byUsername,
-      Provider<AccountIndexer> indexer) {
+      Provider<AccountIndexer> indexer,
+                   ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.byId = byId;
     this.byName = byUsername;
     this.indexer = indexer;
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+    
+    attachToReplication();
   }
 
+  final void attachToReplication() {
+    if( !replicatedEventsCoordinator.isGerritIndexerRunning() ){
+      log.info("Replication is disabled - not hooking in AccountCache listeners.");
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(BYID_NAME, this.byId);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(BYUSER_NAME, this.byName);
+  }
+
+  /**
+   * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   * replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Account.Id to evict from the cache.
+   */
+  private void replicateEvictionFromCache(final String name, final Account.Id value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value);
+    }
+  }
+
+   /**
+   * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   * replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Account username to evict from the cache.
+   */
+  private void replicateEvictionFromCache(final String name, final String value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value);
+    }
+  }
+  
   @Override
   public AccountState get(Account.Id accountId) {
     try {
@@ -126,6 +178,7 @@ public class AccountCacheImpl implements AccountCache {
     if (accountId != null) {
       byId.invalidate(accountId);
       indexer.get().index(accountId);
+      replicateEvictionFromCache(BYID_NAME, accountId);
     }
   }
 
@@ -134,6 +187,7 @@ public class AccountCacheImpl implements AccountCache {
     byId.invalidateAll();
     for (Account.Id accountId : byId.asMap().keySet()) {
       indexer.get().index(accountId);
+      replicateEvictionFromCache(BYID_NAME, accountId);
     }
   }
 
@@ -141,6 +195,7 @@ public class AccountCacheImpl implements AccountCache {
   public void evictByUsername(String username) {
     if (username != null) {
       byName.invalidate(username);
+      replicateEvictionFromCache(BYUSER_NAME, username);
     }
   }
 

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2011 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +30,7 @@ package com.google.gerrit.server.account;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
+import com.google.gerrit.common.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.reviewdb.client.AccountGroup;
 import com.google.gerrit.reviewdb.client.AccountGroupById;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -74,17 +88,44 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
   private final LoadingCache<AccountGroup.UUID, Set<AccountGroup.UUID>> subgroups;
   private final LoadingCache<AccountGroup.UUID, Set<AccountGroup.UUID>> parentGroups;
   private final LoadingCache<String, Set<AccountGroup.UUID>> external;
+  private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
 
   @Inject
   GroupIncludeCacheImpl(
       @Named(SUBGROUPS_NAME) LoadingCache<AccountGroup.UUID, Set<AccountGroup.UUID>> subgroups,
       @Named(PARENT_GROUPS_NAME) LoadingCache<AccountGroup.UUID, Set<AccountGroup.UUID>> parentGroups,
-      @Named(EXTERNAL_NAME) LoadingCache<String, Set<AccountGroup.UUID>> external) {
+      @Named(EXTERNAL_NAME) LoadingCache<String, Set<AccountGroup.UUID>> external,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.subgroups = subgroups;
     this.parentGroups = parentGroups;
     this.external = external;
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+    attachToReplication();
   }
 
+  final void attachToReplication() {
+    if( !replicatedEventsCoordinator.isGerritIndexerRunning() ){
+      log.info("Replication is disabled - not hooking in GroupIncludeCache listeners.");
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(PARENT_GROUPS_NAME, this.parentGroups);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(SUBGROUPS_NAME, this.subgroups);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(EXTERNAL_NAME, this.external);
+  }
+
+  /**
+   * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   * replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value to evict from the cache.
+   */
+  private void replicateEvictionFromCache(String name, AccountGroup.UUID value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      // Invalidate on AccountGroup.UUID happens using the actual object -> so supply it raw.
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value);
+    }
+  }
+  
   @Override
   public Set<AccountGroup.UUID> subgroupsOf(AccountGroup.UUID groupId) {
     try {
@@ -109,6 +150,7 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
   public void evictSubgroupsOf(AccountGroup.UUID groupId) {
     if (groupId != null) {
       subgroups.invalidate(groupId);
+      replicateEvictionFromCache(SUBGROUPS_NAME,groupId);
     }
   }
 
@@ -116,9 +158,11 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
   public void evictParentGroupsOf(AccountGroup.UUID groupId) {
     if (groupId != null) {
       parentGroups.invalidate(groupId);
+      replicateEvictionFromCache(PARENT_GROUPS_NAME,groupId);
 
       if (!AccountGroup.isInternalGroup(groupId)) {
         external.invalidate(EXTERNAL_NAME);
+        replicateEvictionFromCache(EXTERNAL_NAME,groupId);
       }
     }
   }

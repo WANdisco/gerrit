@@ -270,6 +270,9 @@ public class RefControlTest {
       }
 
       @Override
+      public void remove(Project.NameKey name) {}
+
+      @Override
       public Iterable<Project.NameKey> all() {
         return Collections.emptySet();
       }
@@ -319,7 +322,7 @@ public class RefControlTest {
 
     Cache<SectionSortCache.EntryKey, SectionSortCache.EntryVal> c =
         CacheBuilder.newBuilder().build();
-    sectionSorter = new PermissionCollection.Factory(new SectionSortCache(c));
+    sectionSorter = new PermissionCollection.Factory(new SectionSortCache(c, null));
 
     parent = new ProjectConfig(parentKey);
     parent.load(newRepository(parentKey));

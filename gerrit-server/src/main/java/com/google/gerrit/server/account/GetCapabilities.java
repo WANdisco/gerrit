@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2012 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +44,7 @@ import static com.google.gerrit.common.data.GlobalCapability.VIEW_CACHES;
 import static com.google.gerrit.common.data.GlobalCapability.VIEW_CONNECTIONS;
 import static com.google.gerrit.common.data.GlobalCapability.VIEW_PLUGINS;
 import static com.google.gerrit.common.data.GlobalCapability.VIEW_QUEUE;
+import static com.google.gerrit.common.data.GlobalCapability.VIEW_REPLICATOR_STATS;
 
 import com.google.common.collect.Iterables;
 import com.google.gerrit.common.data.GlobalCapability;
@@ -121,6 +135,7 @@ class GetCapabilities implements RestReadView<AccountResource> {
     have.put(VIEW_CONNECTIONS, cc.canViewConnections());
     have.put(VIEW_PLUGINS, cc.canViewPlugins());
     have.put(VIEW_QUEUE, cc.canViewQueue());
+    have.put(VIEW_REPLICATOR_STATS, cc.canViewReplicatorStats());
 
     QueueProvider.QueueType queue = cc.getQueueType();
     if (queue != QueueProvider.QueueType.INTERACTIVE

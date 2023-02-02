@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +31,7 @@ import static com.google.gerrit.reviewdb.client.AccountExternalId.SCHEME_USERNAM
 
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.gerrit.common.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.reviewdb.client.AccountExternalId;
 import com.google.gerrit.reviewdb.client.AccountSshKey;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -74,11 +88,36 @@ public class SshKeyCacheImpl implements SshKeyCache {
   }
 
   private final LoadingCache<String, Iterable<SshKeyCacheEntry>> cache;
-
+  private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
   @Inject
   SshKeyCacheImpl(
-      @Named(CACHE_NAME) LoadingCache<String, Iterable<SshKeyCacheEntry>> cache) {
+      @Named(CACHE_NAME) LoadingCache<String, Iterable<SshKeyCacheEntry>> cache,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.cache = cache;
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+    attachToReplication();
+  }
+
+
+  final void attachToReplication() {
+    if( !replicatedEventsCoordinator.isGerritIndexerRunning() ){
+      log.info("Replication is disabled - not hooking in SectionSortCache listeners.");
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(CACHE_NAME, this.cache);
+  }
+
+  /**
+   * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   * replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value (username) of the user to evict from the cache.
+   */
+  private void replicateEvictionFromCache(final String name, final String value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      // Sshkey invalidation uses the actual username, so supply as a string value.
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value);
+    }
   }
 
   Iterable<SshKeyCacheEntry> get(String username) {
@@ -94,6 +133,7 @@ public class SshKeyCacheImpl implements SshKeyCache {
   public void evict(String username) {
     if (username != null) {
       cache.invalidate(username);
+      replicateEvictionFromCache(CACHE_NAME,username);
     }
   }
 

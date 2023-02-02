@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+
 // Copyright (C) 2013 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +46,7 @@ import com.google.gerrit.extensions.common.ProjectInfo;
 import com.google.gerrit.extensions.events.NewProjectCreatedListener;
 import com.google.gerrit.extensions.registration.DynamicSet;
 import com.google.gerrit.extensions.restapi.BadRequestException;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
 import com.google.gerrit.extensions.restapi.ResourceNotFoundException;
 import com.google.gerrit.extensions.restapi.Response;
@@ -110,22 +124,22 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
 
   @Inject
   CreateProject(Provider<ProjectsCollection> projectsCollection,
-      Provider<GroupsCollection> groupsCollection, ProjectJson json,
-      DynamicSet<ProjectCreationValidationListener> projectCreationValidationListeners,
-      ProjectControl.GenericFactory projectControlFactory,
-      GitRepositoryManager repoManager,
-      DynamicSet<NewProjectCreatedListener> createdListeners,
-      ProjectCache projectCache,
-      GroupBackend groupBackend,
-      ProjectOwnerGroupsProvider.Factory projectOwnerGroups,
-      MetaDataUpdate.User metaDataUpdateFactory,
-      GitReferenceUpdated referenceUpdated,
-      RepositoryConfig repositoryCfg,
-      @GerritPersonIdent PersonIdent serverIdent,
-      Provider<IdentifiedUser> identifiedUser,
-      Provider<PutConfig> putConfig,
-      AllProjectsName allProjects,
-      @Assisted String name) {
+                Provider<GroupsCollection> groupsCollection, ProjectJson json,
+                DynamicSet<ProjectCreationValidationListener> projectCreationValidationListeners,
+                ProjectControl.GenericFactory projectControlFactory,
+                GitRepositoryManager repoManager,
+                DynamicSet<NewProjectCreatedListener> createdListeners,
+                ProjectCache projectCache,
+                GroupBackend groupBackend,
+                ProjectOwnerGroupsProvider.Factory projectOwnerGroups,
+                MetaDataUpdate.User metaDataUpdateFactory,
+                GitReferenceUpdated referenceUpdated,
+                RepositoryConfig repositoryCfg,
+                @GerritPersonIdent PersonIdent serverIdent,
+                Provider<IdentifiedUser> identifiedUser,
+                Provider<PutConfig> putConfig,
+                AllProjectsName allProjects,
+                @Assisted String name) {
     this.projectsCollection = projectsCollection;
     this.groupsCollection = groupsCollection;
     this.projectCreationValidationListeners = projectCreationValidationListeners;
@@ -148,9 +162,9 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
 
   @Override
   public Response<ProjectInfo> apply(TopLevelResource resource,
-      ProjectInput input) throws BadRequestException,
+                                     ProjectInput input) throws BadRequestException,
       UnprocessableEntityException, ResourceConflictException,
-      ResourceNotFoundException, IOException, ConfigInvalidException {
+      ResourceNotFoundException, IOException, ConfigInvalidException, PreconditionFailedException {
     if (input == null) {
       input = new ProjectInput();
     }
@@ -175,7 +189,7 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
           new ArrayList<>(projectOwnerGroups.create(args.getProject()).get());
     } else {
       args.ownerIds =
-        Lists.newArrayListWithCapacity(input.owners.size());
+          Lists.newArrayListWithCapacity(input.owners.size());
       for (String owner : input.owners) {
         args.ownerIds.add(groupsCollection.get().parse(owner).getGroupUUID());
       }
@@ -189,8 +203,8 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
     args.contentMerge =
         input.submitType == SubmitType.FAST_FORWARD_ONLY
             ? InheritableBoolean.FALSE : MoreObjects.firstNonNull(
-                input.useContentMerge,
-                InheritableBoolean.INHERIT);
+            input.useContentMerge,
+            InheritableBoolean.INHERIT);
     args.newChangeForAllNotInTarget =
         MoreObjects.firstNonNull(input.createNewChangeForAllNotInTarget,
             InheritableBoolean.INHERIT);
@@ -230,7 +244,7 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
 
   private Project createProject(CreateProjectArgs args)
       throws BadRequestException, ResourceConflictException, IOException,
-      ConfigInvalidException {
+      ConfigInvalidException, PreconditionFailedException {
     final Project.NameKey nameKey = args.getProject();
     try {
       final String head =
@@ -264,8 +278,14 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
           + " because the name is already occupied by another project."
           + " The other project has the same name, only spelled in a"
           + " different case.");
-    } catch (RepositoryNotFoundException badName) {
-      throw new BadRequestException("invalid project name: " + nameKey);
+    } catch (RepositoryNotFoundException e) {
+      String msg = "Repository Not Found: " + nameKey.get();
+      log.error(msg, e);
+      throw new BadRequestException(e.getCause().getMessage());
+    } catch (PreconditionFailedException e) {
+      String msg = "Resource with the name: " + nameKey + ", already exists on one or more nodes.";
+      log.error(msg, e);
+      throw new PreconditionFailedException(msg);
     } catch (ConfigInvalidException e) {
       String msg = "Cannot create " + nameKey;
       log.error(msg, e);
@@ -338,10 +358,10 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
   }
 
   private void createEmptyCommits(Repository repo, Project.NameKey project,
-      List<String> refs) throws IOException {
+                                  List<String> refs) throws IOException {
     try (ObjectInserter oi = repo.newObjectInserter()) {
       CommitBuilder cb = new CommitBuilder();
-      cb.setTreeId(oi.insert(Constants.OBJ_TREE, new byte[] {}));
+      cb.setTreeId(oi.insert(Constants.OBJ_TREE, new byte[]{}));
       cb.setAuthor(metaDataUpdateFactory.getUserPersonIdent());
       cb.setCommitter(serverIdent);
       cb.setMessage("Initial empty repository\n");
@@ -369,7 +389,7 @@ public class CreateProject implements RestModifyView<TopLevelResource, ProjectIn
           case RENAMED:
           default: {
             throw new IOException(String.format(
-              "Failed to create ref \"%s\": %s", ref, result.name()));
+                "Failed to create ref \"%s\": %s", ref, result.name()));
           }
         }
       }
