@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2013 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,7 +60,7 @@ import org.eclipse.jgit.util.NB;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -58,7 +71,7 @@ public class FileContentUtil {
   private static final String X_GIT_GITLINK = "x-git/gitlink";
   private static final int MAX_SIZE = 5 << 20;
   private static final String ZIP_TYPE = "application/zip";
-  private static final Random rng = new Random();
+  private static final SecureRandom rng = new SecureRandom();
 
   private final GitRepositoryManager repoManager;
   private final FileTypeRegistry registry;
