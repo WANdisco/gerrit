@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2014 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -415,7 +428,8 @@ public class ChangeEditModifier {
     ru.setForceUpdate(true);
     RefUpdate.Result res = ru.update(rw);
     if (res != RefUpdate.Result.NEW &&
-        res != RefUpdate.Result.FORCED) {
+        res != RefUpdate.Result.FORCED &&
+        res != RefUpdate.Result.FAST_FORWARD) {
       throw new IOException("update failed: " + ru);
     }
     return res;

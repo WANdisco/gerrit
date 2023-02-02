@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2011 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -117,6 +130,9 @@ public class GlobalCapability {
   /** Can view all pending tasks in the queue (not just the filtered set). */
   public static final String VIEW_QUEUE = "viewQueue";
 
+  /** Can view all statistics from the WANdisco replicator. */
+  public static final String VIEW_REPLICATOR_STATS = "viewReplicatorStats";
+  
   private static final List<String> NAMES_ALL;
   private static final List<String> NAMES_LC;
 
@@ -143,6 +159,7 @@ public class GlobalCapability {
     NAMES_ALL.add(VIEW_CONNECTIONS);
     NAMES_ALL.add(VIEW_PLUGINS);
     NAMES_ALL.add(VIEW_QUEUE);
+    NAMES_ALL.add(VIEW_REPLICATOR_STATS);
 
     NAMES_LC = new ArrayList<>(NAMES_ALL.size());
     for (String name : NAMES_ALL) {
