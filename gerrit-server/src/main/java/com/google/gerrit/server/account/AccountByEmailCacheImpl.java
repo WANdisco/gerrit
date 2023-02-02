@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +30,7 @@ package com.google.gerrit.server.account;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
+import com.google.gerrit.common.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.reviewdb.client.Account;
 import com.google.gerrit.reviewdb.client.AccountExternalId;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -61,13 +75,38 @@ public class AccountByEmailCacheImpl implements AccountByEmailCache {
   }
 
   private final LoadingCache<String, Set<Account.Id>> cache;
+  private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
+
 
   @Inject
   AccountByEmailCacheImpl(
-      @Named(CACHE_NAME) LoadingCache<String, Set<Account.Id>> cache) {
+      @Named(CACHE_NAME) LoadingCache<String, Set<Account.Id>> cache,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator ) {
     this.cache = cache;
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+    attachToReplication();
   }
 
+  final void attachToReplication() {
+    if(!replicatedEventsCoordinator.isGerritIndexerRunning() ){
+      log.info("Replication is disabled - not hooking in AccountByEmailCache listeners.");
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(CACHE_NAME, this.cache);
+  }
+
+  /**
+   * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   * replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value to evict from the cache.
+   */
+  private void replicateEvictionFromCache(String name, Object value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value);
+    }
+  }
+  
   @Override
   public Set<Account.Id> get(final String email) {
     try {
@@ -82,6 +121,7 @@ public class AccountByEmailCacheImpl implements AccountByEmailCache {
   public void evict(final String email) {
     if (email != null) {
       cache.invalidate(email);
+      replicateEvictionFromCache(CACHE_NAME, email);
     }
   }
 

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2016 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +36,7 @@ import com.google.gerrit.reviewdb.client.PatchSet;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.server.ReviewDb;
 import com.google.gerrit.server.CurrentUser;
+import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.events.ChangeEvent;
 import com.google.gerrit.server.events.Event;
 import com.google.gerrit.server.events.ProjectEvent;
@@ -32,13 +46,17 @@ import com.google.gerrit.server.project.ProjectCache;
 import com.google.gerrit.server.project.ProjectControl;
 import com.google.gerrit.server.project.ProjectState;
 import com.google.gwtorm.server.OrmException;
+import com.google.gwtorm.server.SchemaFactory;
 import com.google.inject.Inject;
-import com.google.inject.Provider;
 import com.google.inject.Singleton;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Distributes Events to listeners if they are allowed to see them */
 @Singleton
 public class EventBroker implements EventDispatcher {
+
+  private static final Logger log = LoggerFactory.getLogger(EventBroker.class);
 
   public static class Module extends LifecycleModule {
     @Override
@@ -61,19 +79,24 @@ public class EventBroker implements EventDispatcher {
 
   protected final ChangeNotes.Factory notesFactory;
 
-  protected final Provider<ReviewDb> dbProvider;
+  protected final SchemaFactory<ReviewDb> schemaFactory;
 
   @Inject
   public EventBroker(DynamicSet<UserScopedEventListener> listeners,
       DynamicSet<EventListener> unrestrictedListeners,
       ProjectCache projectCache,
       ChangeNotes.Factory notesFactory,
-      Provider<ReviewDb> dbProvider) {
+      SchemaFactory<ReviewDb> schemaFactory) {
     this.listeners = listeners;
     this.unrestrictedListeners = unrestrictedListeners;
     this.projectCache = projectCache;
     this.notesFactory = notesFactory;
-    this.dbProvider = dbProvider;
+    this.schemaFactory = schemaFactory;
+  }
+
+  public void addUnrestrictedEventListener(EventListener eventListener){
+    log.info("adding unrestricted listener {}", eventListener.getClass().getSimpleName());
+    unrestrictedListeners.add(eventListener);
   }
 
   @Override
@@ -158,8 +181,9 @@ public class EventBroker implements EventDispatcher {
       return false;
     }
     ProjectControl pc = pe.controlFor(user);
-    ReviewDb db = dbProvider.get();
-    return pc.controlFor(db, change).isVisible(db);
+    try (ReviewDb db = schemaFactory.open()) {
+      return pc.controlFor(db, change).isVisible(db);
+    }
   }
 
   protected boolean isVisibleTo(Branch.NameKey branchName, CurrentUser user) {
@@ -178,9 +202,10 @@ public class EventBroker implements EventDispatcher {
       String ref = refEvent.getRefName();
       if (PatchSet.isChangeRef(ref)) {
         Change.Id cid = PatchSet.Id.fromRef(ref).getParentKey();
-        Change change = notesFactory.create(
-            dbProvider.get(), refEvent.getProjectNameKey(), cid).getChange();
-        return isVisibleTo(change, user);
+        try (ReviewDb db = schemaFactory.open()) {
+          Change change = notesFactory.create(db, refEvent.getProjectNameKey(), cid).getChange();
+          return isVisibleTo(change, user);
+        }
       }
       return isVisibleTo(refEvent.getBranchNameKey(), user);
     } else if (event instanceof ProjectEvent) {

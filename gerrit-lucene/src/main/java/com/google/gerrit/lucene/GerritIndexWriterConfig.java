@@ -22,11 +22,16 @@ import com.google.gerrit.server.config.ConfigUtil;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.analysis.util.CharArraySet;
+import org.apache.lucene.index.ConcurrentMergeScheduler;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
+import org.apache.lucene.util.InfoStream;
 import org.eclipse.jgit.lib.Config;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+
 
 /**
  * Combination of Lucene {@link IndexWriterConfig} with additional
@@ -39,7 +44,12 @@ class GerritIndexWriterConfig {
   private final IndexWriterConfig luceneConfig;
   private long commitWithinMs;
   private final CustomMappingAnalyzer analyzer;
-
+  private static final Logger log = LoggerFactory.getLogger(GerritIndexWriterConfig.class);
+  public static final InfoStream VERBOSE = new VerboseOutput();
+  /*
+   Note that GerritIndexWriterConfig takes both a cfg object and a name,
+   name is the name of the subsection, i.e changes_open / change_closed
+   */
   GerritIndexWriterConfig(Config cfg, String name) {
     analyzer =
         new CustomMappingAnalyzer(new StandardAnalyzer(
@@ -47,6 +57,21 @@ class GerritIndexWriterConfig {
     luceneConfig = new IndexWriterConfig(analyzer)
         .setOpenMode(OpenMode.CREATE_OR_APPEND)
         .setCommitOnClose(true);
+
+    int maxMergeCount = cfg.getInt("index", name, "maxMergeCount", -1);
+    int maxThreadCount = cfg.getInt("index", name, "maxThreadCount", -1);
+    boolean enableAutoIOThrottle = cfg.getBoolean("index", name, "enableAutoIOThrottle", true);
+    if (maxMergeCount != -1 || maxThreadCount != -1 || !enableAutoIOThrottle) {
+      ConcurrentMergeScheduler mergeScheduler = new ConcurrentMergeScheduler();
+      if (maxMergeCount != -1 || maxThreadCount != -1) {
+        mergeScheduler.setMaxMergesAndThreads(maxMergeCount, maxThreadCount);
+      }
+      if (!enableAutoIOThrottle) {
+        mergeScheduler.disableAutoIOThrottle();
+      }
+      luceneConfig.setMergeScheduler(mergeScheduler);
+    }
+
     double m = 1 << 20;
     luceneConfig.setRAMBufferSizeMB(cfg.getLong(
         "index", name, "ramBufferSize",
@@ -60,6 +85,28 @@ class GerritIndexWriterConfig {
               MILLISECONDS.convert(5, MINUTES), MILLISECONDS);
     } catch (IllegalArgumentException e) {
       commitWithinMs = cfg.getLong("index", name, "commitWithin", 0);
+    }
+
+    //Checking that it has been set correctly and if so turn the verbose logging on
+    //for Lucene.
+    if ( cfg.getBoolean("index", name, "verboseLogging", false)) {
+      // turn on verbose logging for lucene
+      luceneConfig.setInfoStream(VERBOSE);
+      // Show the current configuration.
+      log.info("Current lucene configuration: {}", luceneConfig.toString());
+    }
+  }
+
+  private static class VerboseOutput extends InfoStream {
+    public VerboseOutput() { }
+
+    public void message(String component, String message) {
+      log.info(message);
+    }
+    public boolean isEnabled(String component) {
+      return true;
+    }
+    public void close() {
     }
   }
 
@@ -75,3 +122,5 @@ class GerritIndexWriterConfig {
     return commitWithinMs;
   }
 }
+
+
