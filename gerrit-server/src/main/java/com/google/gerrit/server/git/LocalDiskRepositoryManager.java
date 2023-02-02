@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2008 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +28,7 @@
 package com.google.gerrit.server.git;
 
 import com.google.gerrit.extensions.events.LifecycleListener;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.lifecycle.LifecycleModule;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.client.RefNames;
@@ -23,6 +37,7 @@ import com.google.gerrit.server.config.SitePaths;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 
+import org.eclipse.jgit.errors.RepositoryAlreadyExistsException;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.internal.storage.file.LockFile;
 import org.eclipse.jgit.lib.Config;
@@ -125,6 +140,7 @@ public class LocalDiskRepositoryManager implements GitRepositoryManager,
   }
 
   private final Path basePath;
+  private final boolean isNestedEnabled;
   private final Lock namesUpdateLock;
   private volatile SortedSet<Project.NameKey> names = new TreeSet<>();
 
@@ -135,6 +151,7 @@ public class LocalDiskRepositoryManager implements GitRepositoryManager,
     if (basePath == null) {
       throw new IllegalStateException("gerrit.basePath must be configured");
     }
+    isNestedEnabled = cfg.getBoolean("gerrit", "enableNestedRepos", false);
 
     namesUpdateLock = new ReentrantLock(true /* fair */);
   }
@@ -207,7 +224,7 @@ public class LocalDiskRepositoryManager implements GitRepositoryManager,
 
   @Override
   public Repository createRepository(Project.NameKey name)
-      throws RepositoryNotFoundException, RepositoryCaseMismatchException {
+      throws RepositoryNotFoundException, RepositoryCaseMismatchException, PreconditionFailedException {
     Path path = getBasePath(name);
     if (isUnreasonableName(name)) {
       throw new RepositoryNotFoundException("Invalid name: " + name);
@@ -231,10 +248,18 @@ public class LocalDiskRepositoryManager implements GitRepositoryManager,
       loc = FileKey.exact(path.resolve(n).toFile(), FS.DETECTED);
     }
 
-    try {
-      Repository db = RepositoryCache.open(loc, false);
-      db.create(true /* bare */);
+    Repository db = null;
 
+    try {
+      db = RepositoryCache.open(loc, false);
+      db.create(true /* bare */);
+    } catch (RepositoryAlreadyExistsException e2) {
+      throw new PreconditionFailedException(e2.getMessage());
+    } catch (IOException e1) {
+      throw new RepositoryNotFoundException(e1.getMessage(), e1);
+    }
+
+    try {
       StoredConfig config = db.getConfig();
       config.setBoolean(ConfigConstants.CONFIG_CORE_SECTION,
         null, ConfigConstants.CONFIG_KEY_LOGALLREFUPDATES, true);
@@ -337,25 +362,31 @@ public class LocalDiskRepositoryManager implements GitRepositoryManager,
   private boolean isUnreasonableName(final Project.NameKey nameKey) {
     final String name = nameKey.get();
 
-    return name.length() == 0  // no empty paths
-      || name.charAt(name.length() - 1) == '/' // no suffix
-      || name.indexOf('\\') >= 0 // no windows/dos style paths
-      || name.charAt(0) == '/' // no absolute paths
-      || new File(name).isAbsolute() // no absolute paths
-      || name.startsWith("../") // no "l../etc/passwd"
-      || name.contains("/../") // no "foo/../etc/passwd"
-      || name.contains("/./") // "foo/./foo" is insane to ask
-      || name.contains("//") // windows UNC path can be "//..."
-      || name.contains(".git/") // no path segments that end with '.git' as "foo.git/bar"
-      || name.contains("?") // common unix wildcard
-      || name.contains("%") // wildcard or string parameter
-      || name.contains("*") // wildcard
-      || name.contains(":") // Could be used for absolute paths in windows?
-      || name.contains("<") // redirect input
-      || name.contains(">") // redirect output
-      || name.contains("|") // pipe
-      || name.contains("$") // dollar sign
-      || name.contains("\r"); // carriage return
+    boolean unreasonable = name.length() == 0  // no empty paths
+        || name.charAt(name.length() - 1) == '/' // no suffix
+        || name.indexOf('\\') >= 0 // no windows/dos style paths
+        || name.charAt(0) == '/' // no absolute paths
+        || new File(name).isAbsolute() // no absolute paths
+        || name.startsWith("../") // no "l../etc/passwd"
+        || name.contains("/../") // no "foo/../etc/passwd"
+        || name.contains("/./") // "foo/./foo" is insane to ask
+        || name.contains("//") // windows UNC path can be "//..."
+        || name.contains("?") // common unix wildcard
+        || name.contains("%") // wildcard or string parameter
+        || name.contains("*") // wildcard
+        || name.contains(":") // Could be used for absolute paths in windows?
+        || name.contains("<") // redirect input
+        || name.contains(">") // redirect output
+        || name.contains("|") // pipe
+        || name.contains("$") // dollar sign
+        || name.contains("\r");
+
+    if (unreasonable){
+      return true;
+    }
+
+    // no path segments that end with '.git' as "foo.git/bar", if nesting disabled
+    return (!isNestedEnabled) && name.contains(".git");
   }
 
   @Override
@@ -400,7 +431,9 @@ public class LocalDiskRepositoryManager implements GitRepositoryManager,
         BasicFileAttributes attrs) throws IOException {
       if (!dir.equals(startFolder) && isRepo(dir)) {
         addProject(dir);
-        return FileVisitResult.SKIP_SUBTREE;
+        if(!isNestedEnabled){
+          return  FileVisitResult.SKIP_SUBTREE;
+        }
       }
       return FileVisitResult.CONTINUE;
     }
@@ -424,7 +457,14 @@ public class LocalDiskRepositoryManager implements GitRepositoryManager,
         if (isUnreasonableName(nameKey)) {
           log.warn(
               "Ignoring unreasonably named repository " + p.toAbsolutePath());
-        } else {
+        } else if(isNestedEnabled &&
+            !FileKey.isGitRepository(p.toFile(),FS.DETECTED)){
+          // stops directories called .git that are not repos
+          // from entering cache and failing jgit lookup @203
+          log.warn(
+              "Ignoring unreasonably named repository " + p.toAbsolutePath());
+        }
+        else {
           found.add(nameKey);
         }
       }

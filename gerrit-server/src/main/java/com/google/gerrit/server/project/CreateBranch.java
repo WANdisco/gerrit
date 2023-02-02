@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2013 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -170,8 +183,10 @@ public class CreateBranch implements RestModifyView<ProjectResource, BranchInput
         info.canDelete = refControl.canDelete() ? true : null;
         return info;
       } catch (IOException err) {
-        log.error("Cannot create branch \"" + name + "\"", err);
-        throw err;
+        String branchError = "Cannot create branch \"" + name + "\"";
+        log.error(branchError, err);
+        throw new IOException(branchError + ". " + err.getMessage());
+
       }
     } catch (RefUtil.InvalidRevisionException e) {
       throw new BadRequestException("invalid revision \"" + input.revision + "\"");
