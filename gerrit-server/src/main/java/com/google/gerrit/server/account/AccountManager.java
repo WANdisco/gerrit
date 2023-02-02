@@ -148,7 +148,7 @@ public class AccountManager {
   }
 
   private AccountExternalId getAccountExternalId(ReviewDb db,
-      AccountExternalId.Key key) throws OrmException {
+      AccountExternalId.Key key) throws OrmException, IOException {
     if (accountIndexes.getSearchIndex() != null) {
       AccountState accountState =
           accountQueryProvider.get().oneByExternalId(key.get());
@@ -159,7 +159,8 @@ public class AccountManager {
           }
         }
       }
-      return null;
+
+      // if we dont find the user in the search index fall through and try the actual db.
     }
 
     // We don't have at the moment an account_by_external_id cache
@@ -172,6 +173,17 @@ public class AccountManager {
       if (state != null) {
         for (AccountExternalId accountExternalId : state.getExternalIds()) {
           if (accountExternalId.getKey().equals(key)) {
+
+            // we have found the user in the actual db, if we had a search index, raise an index event to
+            // self heal this nodes index for this missing account, so it doesn't happen again.
+            if (accountIndexes.getSearchIndex() != null) {
+              log.warn("Detected an out of date account index -> causing update now for account: %s", accountExternalId.toString());
+              byIdCache.evict(accountExternalId.getAccountId());
+              if (accountExternalId.getEmailAddress() != null) {
+                byEmailCache.evict(accountExternalId.getEmailAddress());
+              }
+            }
+
             return accountExternalId;
           }
         }
