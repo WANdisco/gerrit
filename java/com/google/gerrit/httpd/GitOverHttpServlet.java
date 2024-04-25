@@ -18,6 +18,7 @@ import com.google.common.cache.Cache;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.common.data.Capable;
 import com.google.gerrit.extensions.registration.DynamicSet;
 import com.google.gerrit.extensions.restapi.AuthException;
@@ -40,6 +41,7 @@ import com.google.gerrit.server.permissions.PermissionBackendException;
 import com.google.gerrit.server.permissions.ProjectPermission;
 import com.google.gerrit.server.project.ProjectCache;
 import com.google.gerrit.server.project.ProjectState;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.server.util.time.TimeUtil;
 import com.google.inject.AbstractModule;
 import com.google.inject.Inject;
@@ -83,8 +85,9 @@ import org.eclipse.jgit.transport.resolver.UploadPackFactory;
 /** Serves Git repositories over HTTP. */
 @Singleton
 public class GitOverHttpServlet extends GitServlet {
-  private static final long serialVersionUID = 1L;
 
+  private static final long serialVersionUID = 1L;
+  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
   private static final String ATT_STATE = ProjectState.class.getName();
   private static final String ATT_ARC = AsyncReceiveCommits.class.getName();
   private static final String ID_CACHE = "adv_bases";
@@ -378,6 +381,7 @@ public class GitOverHttpServlet extends GitServlet {
 
   static class ReceiveFilter implements Filter {
     private final Cache<AdvertisedObjectsCacheKey, Set<ObjectId>> cache;
+    private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
     private final PermissionBackend permissionBackend;
     private final Provider<CurrentUser> userProvider;
     private final GroupAuditService groupAuditService;
@@ -389,12 +393,37 @@ public class GitOverHttpServlet extends GitServlet {
         PermissionBackend permissionBackend,
         Provider<CurrentUser> userProvider,
         Provider<WebSession> sessionProvider,
-        GroupAuditService groupAuditService) {
+        GroupAuditService groupAuditService,
+        ReplicatedEventsCoordinator replicatedEventsCoordinator ) {
       this.cache = cache;
       this.permissionBackend = permissionBackend;
       this.userProvider = userProvider;
       this.sessionProvider = sessionProvider;
       this.groupAuditService = groupAuditService;
+      this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+
+      attachToReplication();
+    }
+
+
+    final void attachToReplication() {
+      if (! replicatedEventsCoordinator.isReplicationEnabled()) {
+        logger.atInfo().log("Skipping hooking of [%s] as replication is disabled.", ID_CACHE);
+        return;
+      }
+      replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(ID_CACHE, this.cache);
+    }
+
+    /**
+     * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+     * replicateEvictionFromCache on it.
+     * @param name : Name of the cache to evict from.
+     * @param value : Value to evict from the cache.
+     */
+    private void replicateEvictionFromCache(String name, AdvertisedObjectsCacheKey value) {
+      if (replicatedEventsCoordinator.isReplicationEnabled()) {
+        replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value, value.project().get());
+      }
     }
 
     @Override
@@ -465,11 +494,13 @@ public class GitOverHttpServlet extends GitServlet {
 
       if (isGet) {
         cache.invalidate(cacheKey);
+        replicateEvictionFromCache(ID_CACHE,cacheKey);
       } else {
         Set<ObjectId> ids = cache.getIfPresent(cacheKey);
         if (ids != null) {
           rp.getAdvertisedObjects().addAll(ids);
           cache.invalidate(cacheKey);
+          replicateEvictionFromCache(ID_CACHE,cacheKey);
         }
       }
 

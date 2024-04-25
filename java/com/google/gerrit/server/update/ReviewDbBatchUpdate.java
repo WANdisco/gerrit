@@ -58,6 +58,7 @@ import com.google.gerrit.server.notedb.NoteDbChangeState.PrimaryStorage;
 import com.google.gerrit.server.notedb.NoteDbUpdateManager;
 import com.google.gerrit.server.notedb.NoteDbUpdateManager.MismatchedStateException;
 import com.google.gerrit.server.notedb.NotesMigration;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gwtorm.server.OrmException;
 import com.google.gwtorm.server.SchemaFactory;
 import com.google.inject.Inject;
@@ -311,6 +312,8 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
   private final ReviewDb db;
   private final SchemaFactory<ReviewDb> schemaFactory;
   private final long skewMs;
+  private ReplicatedEventsCoordinator replicatedEventsCoordinator;
+
 
   @SuppressWarnings("deprecation")
   private final List<com.google.common.util.concurrent.CheckedFuture<?, IOException>> indexFutures =
@@ -334,7 +337,8 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
       @Assisted ReviewDb db,
       @Assisted Project.NameKey project,
       @Assisted CurrentUser user,
-      @Assisted Timestamp when) {
+      @Assisted Timestamp when,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     super(repoManager, serverIdent, project, user, when);
     this.allUsers = allUsers;
     this.changeNotesFactory = changeNotesFactory;
@@ -346,9 +350,18 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
     this.notesMigration = notesMigration;
     this.schemaFactory = schemaFactory;
     this.updateManagerFactory = updateManagerFactory;
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
     this.db = db;
     skewMs = NoteDbChangeState.getReadOnlySkew(cfg);
   }
+
+  public void queueReplicationIndexDeletionEvent(int changeId, String projectName) throws IOException {
+    if (replicatedEventsCoordinator.isReplicationEnabled()) {
+      replicatedEventsCoordinator.getReplicatedOutgoingIndexEventsFeed()
+          .queueReplicationIndexDeletionEvent(changeId, projectName);
+    }
+  }
+
 
   @Override
   public void execute(BatchUpdateListener listener) throws UpdateException, RestApiException {
@@ -495,7 +508,7 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
     // Reindex changes.
     for (ChangeTask task : tasks) {
       if (task.deleted) {
-        indexFutures.add(indexer.deleteAsync(task.id));
+        indexFutures.add(indexer.deleteAsync(project, task.id));
       } else if (task.dirty) {
         indexFutures.add(indexer.indexAsync(project, task.id));
       }
@@ -706,6 +719,14 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
           } else {
             logDebug("Skipping ReviewDb write since primary storage is %s", storage);
           }
+
+          if (deleted){
+            String change = id.toString();
+            int changeId = Integer.parseInt(change);
+            String projectName = project.toString();
+            queueReplicationIndexDeletionEvent(changeId, projectName);
+          }
+
         } finally {
           db.rollback();
         }

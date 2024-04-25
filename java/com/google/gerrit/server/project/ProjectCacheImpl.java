@@ -34,37 +34,46 @@ import com.google.gerrit.server.config.AllUsersName;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.feeds.ReplicatedOutgoingCacheEventsFeed;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Named;
+
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.lib.Repository;
 
-/** Cache of project information, including access rights. */
+/**
+ * Cache of project information, including access rights.
+ */
 @Singleton
 public class ProjectCacheImpl implements ProjectCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-  public static final String CACHE_NAME = "projects";
-
-  private static final String CACHE_LIST = "project_list";
+  public static final String CACHE_PROJECTS_BYNAME = "projects";
+  private static final String CACHE_PROJECTS_LIST = "project_list";
+  public static final String PROJECT_CACHE_NAME = ProjectCacheImpl.class.getSimpleName();
 
   public static Module module() {
     return new CacheModule() {
       @Override
       protected void configure() {
-        cache(CACHE_NAME, String.class, ProjectState.class).loader(Loader.class);
+        cache(CACHE_PROJECTS_BYNAME, String.class, ProjectState.class).loader(Loader.class);
 
-        cache(CACHE_LIST, ListKey.class, new TypeLiteral<ImmutableSortedSet<Project.NameKey>>() {})
+        cache(CACHE_PROJECTS_LIST, ListKey.class, new TypeLiteral<ImmutableSortedSet<Project.NameKey>>() {
+        })
             .maximumWeight(1)
             .loader(Lister.class);
 
@@ -89,16 +98,18 @@ public class ProjectCacheImpl implements ProjectCache {
   private final LoadingCache<ListKey, ImmutableSortedSet<Project.NameKey>> list;
   private final Lock listLock;
   private final ProjectCacheClock clock;
+  private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
   private final Provider<ProjectIndexer> indexer;
 
   @Inject
   ProjectCacheImpl(
       final AllProjectsName allProjectsName,
       final AllUsersName allUsersName,
-      @Named(CACHE_NAME) LoadingCache<String, ProjectState> byName,
-      @Named(CACHE_LIST) LoadingCache<ListKey, ImmutableSortedSet<Project.NameKey>> list,
+      @Named(CACHE_PROJECTS_BYNAME) LoadingCache<String, ProjectState> byName,
+      @Named(CACHE_PROJECTS_LIST) LoadingCache<ListKey, ImmutableSortedSet<Project.NameKey>> list,
       ProjectCacheClock clock,
-      Provider<ProjectIndexer> indexer) {
+      Provider<ProjectIndexer> indexer,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.allProjectsName = allProjectsName;
     this.allUsersName = allUsersName;
     this.byName = byName;
@@ -106,7 +117,55 @@ public class ProjectCacheImpl implements ProjectCache {
     this.listLock = new ReentrantLock(true /* fair */);
     this.clock = clock;
     this.indexer = indexer;
+    /* WD Replication support */
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+
+    attachToReplication();
   }
+
+  final void attachToReplication() {
+    if (! replicatedEventsCoordinator.isReplicationEnabled()) {
+      logger.atInfo().log("Skipping ProjectCache hooking of [%s], [%s] as replication is disabled.",
+              CACHE_PROJECTS_BYNAME, CACHE_PROJECTS_BYNAME);
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(CACHE_PROJECTS_BYNAME, this.byName);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(CACHE_PROJECTS_LIST, this.list); // it's never evicted in the code below
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchObject(PROJECT_CACHE_NAME, this);
+  }
+
+  /**
+   * Calls the replicateEvictionFromCache in getReplicatedOutgoingCacheEventsFeed from the replicated coordinator.
+   * @param cacheName : Name of the cache
+   * @param projectName : Value to evict from the cache
+   */
+  private void replicateEvictionFromCache(final String cacheName, final String projectName) {
+    if(replicatedEventsCoordinator.isReplicationEnabled()) {
+      // Note here we are sending out a replicated eviction for a specific cache X, projectName=Y name X.
+      // But as this is for project cache information (projectList) - this is only held in ALL_PROJECTS.
+      // As such we do not wish for it to be replicated on the given project DSM, we want it always to use ALL_PROJECTS.
+      //    -> so this is why we have a field projectName, and an additional field for the projectDSM for replication.
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(cacheName, projectName, allProjectsName.get());
+    }
+  }
+
+  /**
+   * Calls the replicateMethodCallFromCache in getReplicatedOutgoingCacheEventsFeed from the replicated coordinator.
+   * @param cacheName : Name of the cache
+   * @param methodName : Method call to replicate
+   * @param otherMethodArgs : Any other arguments that the method takes.
+   * @param projectNameForReplication : Project name for which DSM to be used during replication of this information.
+   */
+  private void replicateMethodCallFromCache(final String cacheName,
+                                            final String methodName,
+                                            final List<Object> otherMethodArgs,
+                                            final String projectNameForReplication) {
+    if(replicatedEventsCoordinator.isReplicationEnabled()) {
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed()
+          .replicateMethodCallFromCache(cacheName, methodName, otherMethodArgs, projectNameForReplication);
+    }
+  }
+
 
   @Override
   public ProjectState getAllProjects() {
@@ -169,6 +228,7 @@ public class ProjectCacheImpl implements ProjectCache {
     if (state != null && state.needsRefresh(clock.read())) {
       byName.invalidate(projectName.get());
       state = byName.get(projectName.get());
+      replicateEvictionFromCache(CACHE_PROJECTS_BYNAME, projectName.get());
     }
     return state;
   }
@@ -183,45 +243,134 @@ public class ProjectCacheImpl implements ProjectCache {
     if (p != null) {
       logger.atFine().log("Evict project '%s'", p.get());
       byName.invalidate(p.get());
+      replicateEvictionFromCache(CACHE_PROJECTS_BYNAME, p.get());
     }
-    indexer.get().index(p);
+    replicatedEventsCoordinator.getProjectIndexer().index(p);
+  }
+
+
+  // Performs an eviction from the projects cache. If replicated is true then
+  // send a replicated cache eviction to all sites.
+  public void evictWithoutReindex(Project.NameKey p, boolean replication) throws IOException {
+    if (p != null) {
+      logger.atFine().log("Evict project '%s'", p.get());
+      byName.invalidate(p.get());
+      if(replication) {
+        replicateEvictionFromCache(CACHE_PROJECTS_BYNAME, p.get());
+      }
+    }
   }
 
   @Override
   public void remove(Project p) throws IOException {
-    remove(p.getNameKey());
+    removeImpl(p.getNameKey(), replicatedEventsCoordinator.isReplicationEnabled());
   }
 
   @Override
   public void remove(Project.NameKey name) throws IOException {
+    removeImpl(name, replicatedEventsCoordinator.isReplicationEnabled());
+  }
+
+  public void removeNoRepl(Project.NameKey name) throws IOException {
+    removeImpl(name, false);
+  }
+
+  private void removeImpl(Project.NameKey name, boolean doReplicatedRemove) throws IOException {
     listLock.lock();
     try {
       list.put(
           ListKey.ALL,
           ImmutableSortedSet.copyOf(Sets.difference(list.get(ListKey.ALL), ImmutableSet.of(name))));
+
+      if ( doReplicatedRemove ) {
+        // this call is being replicated to the other nodes, but we do not want this further replicated on
+        // the other nodes so this is sent with method 'removeNoRepl'
+        replicateMethodCallFromCache(PROJECT_CACHE_NAME, "removeNoRepl", Arrays.asList(name), allProjectsName.get());
+        //Replicated delete from the project index
+        replicatedEventsCoordinator.getProjectIndexer().deleteIndex(name);
+      }
+
     } catch (ExecutionException e) {
       logger.atWarning().withCause(e).log("Cannot list available projects");
     } finally {
       listLock.unlock();
     }
-    evict(name);
+
+    // If we are a remote site running the removeNoRepl then
+    // replication will be false. We want to delete from the local index only
+    // TODO entire block below may need to be removed. See GER-1840
+    if(!doReplicatedRemove) {
+        replicatedEventsCoordinator.getProjectIndexer().deleteIndexNoRepl(name);
+    }
+
+    //NOTE: remote sites will call removeNoRepl and come into this
+    //method to evict from their local site.
+    evictWithoutReindex(name, doReplicatedRemove);
   }
 
+  /**
+   * onCreateProject update with replication enabled by default.
+   *
+   * @param newProjectName
+   * @throws IOException
+   */
   @Override
-  public void onCreateProject(Project.NameKey newProjectName) throws IOException {
+  public void onCreateProject(Project.NameKey newProjectName, final String head) throws IOException {
+
+    // we allow replication to be enabled as an override setting, to pick this up for default
+    // behaviour
+    onCreateProjectImpl(newProjectName, head, replicatedEventsCoordinator.isReplicationEnabled());
+  }
+
+  /**
+   * same as onCreateProject but without replication enabled.
+   * This will allow it to be called in response to a replication event and therefore not cause
+   * replication itself and avoid a recursive loop.
+   *
+   * @param newProjectName
+   * @throws IOException
+   */
+  public void onCreateProjectNoReplication(Project.NameKey newProjectName, String head) throws IOException {
+    onCreateProjectImpl(newProjectName, head, false);
+  }
+
+  private void onCreateProjectImpl(final Project.NameKey newProjectName, final String head, final boolean doReplicatedCreate) throws IOException {
     listLock.lock();
     try {
       list.put(
           ListKey.ALL,
           ImmutableSortedSet.copyOf(
               Sets.union(list.get(ListKey.ALL), ImmutableSet.of(newProjectName))));
+
+      if ( doReplicatedCreate ) {
+        // this call is being replicated to the other nodes, but we do not want this further replicated on
+        // the other nodes so this is sent with method 'onCreateProjectNoReplication'. Note send all method calls parameters
+        // as arguments, and also which project is to be used for replication.  So this call is against ALL_PROJECTS to keep
+        // it inline with the projectIndex.index calls below.
+        replicateMethodCallFromCache(PROJECT_CACHE_NAME, "onCreateProjectNoReplication",
+            Arrays.asList(newProjectName, head), allProjectsName.get());
+      }
     } catch (ExecutionException e) {
       logger.atWarning().withCause(e).log("Cannot list available projects");
     } finally {
       listLock.unlock();
     }
-    indexer.get().index(newProjectName);
+    // Calling index instead of indexNoRepl here as it will be responsible for firing
+    // off a replicatedReindex if doReplicatedCreate as well as doing the actual local reindex.
+    // doReplicatedCreate should only be true on the originator.
+    if( doReplicatedCreate ) {
+      replicatedEventsCoordinator.getProjectIndexer().index(newProjectName);
+    }
+
+    // N.B. We must still index in NON replicated setup. We could have entered this method with
+    // doReplicatedCreate=false because we're a receiving node. If replication is turned off in
+    // the coordinator, we should do an indexNoRepl to follow vanilla behaviour.
+    if (!replicatedEventsCoordinator.isReplicationEnabled()) {
+      replicatedEventsCoordinator.getProjectIndexer().indexNoRepl(newProjectName);
+    }
+
   }
+
 
   @Override
   public ImmutableSortedSet<Project.NameKey> all() {
@@ -290,7 +439,8 @@ public class ProjectCacheImpl implements ProjectCache {
   static class ListKey {
     static final ListKey ALL = new ListKey();
 
-    private ListKey() {}
+    private ListKey() {
+    }
   }
 
   static class Lister extends CacheLoader<ListKey, ImmutableSortedSet<Project.NameKey>> {
@@ -311,6 +461,10 @@ public class ProjectCacheImpl implements ProjectCache {
 
   @VisibleForTesting
   public void evictAllByName() {
+    if (replicatedEventsCoordinator.isReplicationEnabled()) {
+      // replicate the invalidation.
+      replicateEvictionFromCache(CACHE_PROJECTS_BYNAME, ReplicatedOutgoingCacheEventsFeed.evictAllWildCard);
+    }
     byName.invalidateAll();
   }
 

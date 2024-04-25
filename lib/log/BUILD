@@ -7,6 +7,8 @@ java_library(
         "//javatests/com/google/gerrit/elasticsearch:__pkg__",
         "//lib/jgit/org.eclipse.jgit:__pkg__",
         "//plugins:__pkg__",
+        "//java/com/google/gerrit/server:__pkg__",
+        "//gerrit-console-api:__pkg__"
     ],
     exports = ["@log-api//jar"],
 )
@@ -24,6 +26,13 @@ java_library(
     visibility = ["//visibility:public"],
     exports = ["@impl-log4j//jar"],
     runtime_deps = [":log4j"],
+)
+
+java_library(
+    name = "jul-to-slf4j",
+    data = ["//lib:LICENSE-slf4j"],
+    visibility = ["//visibility:public"],
+    exports = ["@jul-to-slf4j//jar"],
 )
 
 java_library(

@@ -19,6 +19,7 @@ import com.google.gerrit.reviewdb.client.Change;
 import com.google.gerrit.server.data.AccountAttribute;
 import com.google.gerrit.server.data.ApprovalAttribute;
 
+@isReplicatedServerEvent
 public class VoteDeletedEvent extends PatchSetEvent {
   static final String TYPE = "vote-deleted";
   public Supplier<AccountAttribute> reviewer;
@@ -29,4 +30,5 @@ public class VoteDeletedEvent extends PatchSetEvent {
   public VoteDeletedEvent(Change change) {
     super(TYPE, change);
   }
+
 }

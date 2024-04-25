@@ -28,6 +28,7 @@ import com.google.gerrit.pgm.util.BatchProgramModule;
 import com.google.gerrit.pgm.util.RuntimeShutdown;
 import com.google.gerrit.pgm.util.SiteProgram;
 import com.google.gerrit.pgm.util.ThreadLimiter;
+import com.google.gerrit.server.util.GuiceUtils;
 import com.google.gerrit.reviewdb.client.Change;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.server.change.ChangeResource;
@@ -37,6 +38,9 @@ import com.google.gerrit.server.index.change.ChangeSchemaDefinitions;
 import com.google.gerrit.server.notedb.rebuild.GcAllUsers;
 import com.google.gerrit.server.notedb.rebuild.NoteDbMigrator;
 import com.google.gerrit.server.plugins.PluginGuiceEnvironment;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
 import com.google.gerrit.server.schema.DataSourceType;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
@@ -45,6 +49,8 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.eclipse.jgit.util.ReplicationConfiguration;
 import org.kohsuke.args4j.Option;
 import org.kohsuke.args4j.spi.ExplicitBooleanOptionHandler;
 
@@ -240,6 +246,13 @@ public class MigrateToNoteDb extends SiteProgram {
           @Override
           public void configure() {
             install(dbInjector.getInstance(BatchProgramModule.class));
+            if(!GuiceUtils.hasBinding(dbInjector, ReplicationConfiguration.class)){
+              install(new ReplicatedConfiguration.Module());
+            }
+            // if replicatedConfiguration was ever true, then we would need to bind a real ReplicatedEventsCoordinatorImpl
+            if(!GuiceUtils.hasBinding(dbInjector, ReplicatedEventsCoordinator.class)) {
+              install(new NonReplicatedCoordinatorModule());
+            }
             install(new DummyIndexModule());
             factory(ChangeResource.Factory.class);
             factory(GarbageCollection.Factory.class);

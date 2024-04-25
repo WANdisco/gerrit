@@ -27,6 +27,8 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.transport.ReceiveCommand;
 
+import java.util.StringJoiner;
+
 @Singleton
 public class GitReferenceUpdated {
   public static final GitReferenceUpdated DISABLED =
@@ -217,15 +219,20 @@ public class GitReferenceUpdated {
     }
 
     @Override
-    public String toString() {
-      return String.format(
-          "%s[%s,%s: %s -> %s]",
-          getClass().getSimpleName(), projectName, ref, oldObjectId, newObjectId);
+    public NotifyHandling getNotify() {
+      return NotifyHandling.ALL;
     }
 
     @Override
-    public NotifyHandling getNotify() {
-      return NotifyHandling.ALL;
+    public String toString() {
+      return new StringJoiner(", ", Event.class.getSimpleName() + "[", "]")
+          .add("projectName='" + projectName + "'")
+          .add("ref='" + ref + "'")
+          .add("oldObjectId='" + oldObjectId + "'")
+          .add("newObjectId='" + newObjectId + "'")
+          .add("type=" + type)
+          .add("updater=" + updater)
+          .toString();
     }
   }
 }

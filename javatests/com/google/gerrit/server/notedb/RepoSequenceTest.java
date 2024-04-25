@@ -15,6 +15,9 @@
 package com.google.gerrit.server.notedb;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.gerrit.server.replication.configuration.ReplicationConstants.GERRIT_EVENTS_BACKOFF_CEILING_PERIOD;
+import static com.google.gerrit.server.replication.configuration.ReplicationConstants.GERRIT_EVENTS_BACKOFF_INITIAL_PERIOD;
+import static com.google.gerrit.server.replication.configuration.ReplicationConstants.GERRIT_MAX_NUM_EVENTS_RETRIES;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.eclipse.jgit.lib.Constants.OBJ_BLOB;
 import static org.junit.Assert.fail;
@@ -26,12 +29,14 @@ import com.google.common.util.concurrent.Runnables;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.client.RefNames;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
+import com.google.gerrit.server.replication.AbstractReplicationSetup;
 import com.google.gerrit.testing.InMemoryRepositoryManager;
 import com.google.gwtorm.server.OrmException;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
 import org.eclipse.jgit.junit.TestRepository;
 import org.eclipse.jgit.lib.ObjectId;
@@ -40,11 +45,12 @@ import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-public class RepoSequenceTest {
+public class RepoSequenceTest extends AbstractReplicationSetup {
   // Don't sleep in tests.
   private static final Retryer<RefUpdate.Result> RETRYER =
       RepoSequence.retryerBuilder().withBlockStrategy(t -> {}).build();
@@ -53,6 +59,18 @@ public class RepoSequenceTest {
 
   private InMemoryRepositoryManager repoManager;
   private Project.NameKey project;
+
+  @BeforeClass
+  public static void beforeClass() throws Exception {
+    Properties extraProperties = new Properties();
+
+    // SET our pool to 2 items, plus the 2 core projects.
+    extraProperties.put(GERRIT_MAX_NUM_EVENTS_RETRIES, "10");
+    extraProperties.put(GERRIT_EVENTS_BACKOFF_INITIAL_PERIOD, "0.5");
+    extraProperties.put(GERRIT_EVENTS_BACKOFF_CEILING_PERIOD, "10");
+
+    AbstractReplicationSetup.setupReplicatedEventsCoordinatorProps(true, extraProperties);
+  }
 
   @Before
   public void setUp() throws Exception {
@@ -185,8 +203,7 @@ public class RepoSequenceTest {
         newSequence("id", 1, 3).next();
         fail();
       } catch (OrmException e) {
-        assertThat(e.getCause()).isInstanceOf(ExecutionException.class);
-        assertThat(e.getCause().getCause()).isInstanceOf(IncorrectObjectTypeException.class);
+        assertThat(e.getCause()).isInstanceOf(IncorrectObjectTypeException.class);
       }
     }
   }
@@ -210,7 +227,10 @@ public class RepoSequenceTest {
 
   @Test
   public void nextWithCountOneCaller() throws Exception {
-    RepoSequence s = newSequence("id", 1, 3);
+    final int batchSize = 3;
+    RepoSequence s = newSequence("id", 1, batchSize);
+    assertThat(s.batchSize).isEqualTo(batchSize);
+
     assertThat(s.next(2)).containsExactly(1, 2).inOrder();
     assertThat(s.acquireCount).isEqualTo(1);
     assertThat(s.next(2)).containsExactly(3, 4).inOrder();
@@ -354,6 +374,7 @@ public class RepoSequenceTest {
       Runnable afterReadRef,
       Retryer<RefUpdate.Result> retryer) {
     return new RepoSequence(
+        dummyTestCoordinator.getReplicatedConfiguration(),
         repoManager,
         GitReferenceUpdated.DISABLED,
         project,

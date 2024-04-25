@@ -30,6 +30,7 @@ import com.google.gerrit.server.group.db.Groups;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
 import com.google.gerrit.server.query.group.InternalGroupQuery;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gwtorm.server.OrmException;
 import com.google.inject.Inject;
 import com.google.inject.Module;
@@ -37,11 +38,14 @@ import com.google.inject.Provider;
 import com.google.inject.Singleton;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Named;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 
-/** Tracks group inclusions in memory for efficient access. */
+/**
+ * Tracks group inclusions in memory for efficient access.
+ */
 @Singleton
 public class GroupIncludeCacheImpl implements GroupIncludeCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -55,18 +59,21 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
       @Override
       protected void configure() {
         cache(
-                GROUPS_WITH_MEMBER_NAME,
-                Account.Id.class,
-                new TypeLiteral<ImmutableSet<AccountGroup.UUID>>() {})
+            GROUPS_WITH_MEMBER_NAME,
+            Account.Id.class,
+            new TypeLiteral<ImmutableSet<AccountGroup.UUID>>() {
+            })
             .loader(GroupsWithMemberLoader.class);
 
         cache(
-                PARENT_GROUPS_NAME,
-                AccountGroup.UUID.class,
-                new TypeLiteral<ImmutableList<AccountGroup.UUID>>() {})
+            PARENT_GROUPS_NAME,
+            AccountGroup.UUID.class,
+            new TypeLiteral<ImmutableList<AccountGroup.UUID>>() {
+            })
             .loader(ParentGroupsLoader.class);
 
-        cache(EXTERNAL_NAME, String.class, new TypeLiteral<ImmutableList<AccountGroup.UUID>>() {})
+        cache(EXTERNAL_NAME, String.class, new TypeLiteral<ImmutableList<AccountGroup.UUID>>() {
+        })
             .loader(AllExternalLoader.class);
 
         bind(GroupIncludeCacheImpl.class);
@@ -78,6 +85,8 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
   private final LoadingCache<Account.Id, ImmutableSet<AccountGroup.UUID>> groupsWithMember;
   private final LoadingCache<AccountGroup.UUID, ImmutableList<AccountGroup.UUID>> parentGroups;
   private final LoadingCache<String, ImmutableList<AccountGroup.UUID>> external;
+  private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
+
 
   @Inject
   GroupIncludeCacheImpl(
@@ -85,10 +94,52 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
           LoadingCache<Account.Id, ImmutableSet<AccountGroup.UUID>> groupsWithMember,
       @Named(PARENT_GROUPS_NAME)
           LoadingCache<AccountGroup.UUID, ImmutableList<AccountGroup.UUID>> parentGroups,
-      @Named(EXTERNAL_NAME) LoadingCache<String, ImmutableList<AccountGroup.UUID>> external) {
+      @Named(EXTERNAL_NAME) LoadingCache<String, ImmutableList<AccountGroup.UUID>> external,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.groupsWithMember = groupsWithMember;
     this.parentGroups = parentGroups;
     this.external = external;
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+
+
+    attachToReplication();
+  }
+
+  final void attachToReplication() {
+    if(! replicatedEventsCoordinator.isReplicationEnabled() ){
+      logger.atInfo().log("Replication is disabled - not hooking in GroupIncludeCache listeners.");
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(PARENT_GROUPS_NAME, this.parentGroups);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(GROUPS_WITH_MEMBER_NAME, this.groupsWithMember);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(EXTERNAL_NAME, this.external);
+  }
+
+  /**
+   * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   * replicateEvictionFromCache on it.
+   *   N.B. Always evict the group caches using the ALL_USERS project DSM.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value to evict from the cache.
+   */
+  private void replicateEvictionFromCache(String name, AccountGroup.UUID value) {
+    if(replicatedEventsCoordinator.isReplicationEnabled()) {
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value,
+          replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
+    }
+  }
+  /**
+   * Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   * replicateEvictionFromCache on it.
+   *   N.B. Always evict the group caches using the ALL_USERS project DSM.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value to evict from the cache.
+   */
+  private void replicateEvictionFromCache(String name, Account.Id value) {
+    if(replicatedEventsCoordinator.isReplicationEnabled()) {
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value,
+          replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
+    }
   }
 
   @Override
@@ -116,6 +167,7 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
     if (memberId != null) {
       logger.atFine().log("Evict groups with member %d", memberId.get());
       groupsWithMember.invalidate(memberId);
+      replicateEvictionFromCache(GROUPS_WITH_MEMBER_NAME, memberId);
     }
   }
 
@@ -124,10 +176,13 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
     if (groupId != null) {
       logger.atFine().log("Evict parent groups of %s", groupId.get());
       parentGroups.invalidate(groupId);
+      replicateEvictionFromCache(PARENT_GROUPS_NAME, groupId);
+
 
       if (!AccountGroup.isInternalGroup(groupId)) {
         logger.atFine().log("Evict external group %s", groupId.get());
         external.invalidate(EXTERNAL_NAME);
+        replicateEvictionFromCache(EXTERNAL_NAME, groupId);
       }
     }
   }

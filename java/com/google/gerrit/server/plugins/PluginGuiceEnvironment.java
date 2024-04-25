@@ -36,6 +36,10 @@ import com.google.gerrit.extensions.systemstatus.ServerInformation;
 import com.google.gerrit.extensions.webui.WebUiPlugin;
 import com.google.gerrit.index.IndexCollection;
 import com.google.gerrit.metrics.MetricMaker;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
+import com.google.gerrit.server.util.GuiceUtils;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.modules.ReplicatedCoordinatorModule;
 import com.google.gerrit.server.util.PluginRequestContext;
 import com.google.gerrit.server.util.RequestContext;
 import com.google.gerrit.server.util.ThreadLocalRequestContext;
@@ -101,6 +105,11 @@ public class PluginGuiceEnvironment {
   private Map<TypeLiteral<?>, DynamicMap<?>> sysMaps;
   private Map<TypeLiteral<?>, DynamicMap<?>> sshMaps;
   private Map<TypeLiteral<?>, DynamicMap<?>> httpMaps;
+
+  // Default to true, allowing copy of replicated coordinator instance info.
+  private static boolean allowCopyOfReplicatedCoordinatorInstance = true;
+
+
 
   @Inject
   PluginGuiceEnvironment(
@@ -498,7 +507,11 @@ public class PluginGuiceEnvironment {
     return src.findBindingsByType(type);
   }
 
-  private Module copy(Injector src) {
+  // Filter out types used in DynamicItem when copying bindings to plugins
+  // This avoids Guice creation errors when a plugin tries to bind its own implementation
+  // of a type that gerrit core already implemented.
+
+  private Module copy(final Injector src) {
     Set<TypeLiteral<?>> dynamicTypes = new HashSet<>();
     Set<TypeLiteral<?>> dynamicItemTypes = new HashSet<>();
     for (Map.Entry<Key<?>, Binding<?>> e : src.getBindings().entrySet()) {
@@ -546,6 +559,32 @@ public class PluginGuiceEnvironment {
         for (Map.Entry<Key<?>, Binding<?>> e : bindings.entrySet()) {
           Key<Object> k = (Key<Object>) e.getKey();
           Binding<Object> b = (Binding<Object>) e.getValue();
+
+          /* The configure method here is essentially filtering out the binding that we need
+           * for our ReplicatedEventsCoordinator. It also converts all the bindings that it finds to
+           * Provided bindings. This block is to prevent the configure method
+           * filtering out this required class binding and also to stop it from converting it to a
+           * Provided binding. This will make this class available to all the plugins.*/
+          if (e.getKey().toString().contains(ReplicatedEventsCoordinator.class.getSimpleName())) {
+              // If we have either of the ReplicatedModule providers, either the real one ReplicatedCoordinatorModule,
+              // or the fake non replicated one, NonReplicatedCoordinatorModule, then we can check if we can bind this item.
+              // note we may already have provided this binding, so only do it once.
+            if (shouldCopyOfReplicatedCoordinatorInstance(src)) {
+              ReplicatedEventsCoordinator replicatedEventsCoordinatorImpl =
+                  src.getInstance(ReplicatedEventsCoordinator.class);
+
+              // create a standard linked binding to the existing instance that Guice already knows
+              // about. This binding will be available to all the plugins.
+              bind(ReplicatedEventsCoordinator.class).toInstance(replicatedEventsCoordinatorImpl);
+
+              // if there is a provider registered, copy it over, as we may need it for calling getInstance,
+              // for anywhere lazy loading and not using @Inject creation.
+              bind(k).toProvider(b.getProvider());
+              continue;
+            }
+          }
+
+          //Otherwise setup the binding as a Provider binding.
           bind(k).toProvider(b.getProvider());
         }
 
@@ -561,6 +600,43 @@ public class PluginGuiceEnvironment {
         }
       }
     };
+  }
+
+  /**
+   * See GER-1889 for reason why added.
+   * @param allowCopyOfReplicatedCoordinatorInstance
+   */
+  public static void setAllowCopyOfReplicatedCoordinatorInstance(boolean allowCopyOfReplicatedCoordinatorInstance) {
+    PluginGuiceEnvironment.allowCopyOfReplicatedCoordinatorInstance = allowCopyOfReplicatedCoordinatorInstance;
+  }
+
+  /** GER-1889: Allow copy of replicated instance information.
+   *
+   * allow copying of the instance information by default.
+   * It would appear that copying of the instance information is not required for usual cases.
+   * Where it gets tricky is that Plugins, use a copy of the environment and bindings.
+   * If we only used Providers we would be ok, but as its a mix of provider and instance we need to copy of the instance
+   * over only once into each unique context.
+   *
+   *  We need to put our decision making here, and get better at recognising when.
+   *  For now copying for the plugins in the daemon, even though they may or may not be used, seems fine as they are always
+   *  unique and reattached ( see attachItems ).  But when in "reindex" they are not loaded with unqiue HTTP endpoints
+   *  so they share the context, and copying it each time, will fail with duplicate bindings.
+   *  for now I am putting a global variable which can be set to prevent this copy operation and do it only for reindex
+   *  until I get time to investigate a better prevention.
+    * @return
+   */
+  private boolean shouldCopyOfReplicatedCoordinatorInstance(Injector src){
+    if ( GuiceUtils.hasModule(src, ReplicatedCoordinatorModule.class) || GuiceUtils.hasModule(src, NonReplicatedCoordinatorModule.class) ){
+      // now we can ask questions about copying it over.
+      return allowCopyOfReplicatedCoordinatorInstance;
+    }
+    // If there is not replicated coordinator module in any way - we can't even ask for further information to copy it.
+    return false;
+  }
+
+  public static boolean allowCopyOfReplicatedCoordinatorInstance(){
+    return allowCopyOfReplicatedCoordinatorInstance;
   }
 
   private boolean shouldCopy(Key<?> key) {

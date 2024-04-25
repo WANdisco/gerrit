@@ -20,6 +20,7 @@ import com.google.gerrit.server.Sequences;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.notedb.RepoSequence;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import com.google.gwtorm.server.OrmException;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
@@ -28,16 +29,21 @@ import com.google.inject.Singleton;
 public class SequencesOnInit {
   private final GitRepositoryManager repoManager;
   private final AllUsersNameOnInitProvider allUsersName;
+  private final ReplicatedConfiguration replicatedConfiguration;
 
   @Inject
-  SequencesOnInit(GitRepositoryManagerOnInit repoManager, AllUsersNameOnInitProvider allUsersName) {
+  SequencesOnInit(GitRepositoryManagerOnInit repoManager,
+                  AllUsersNameOnInitProvider allUsersName,
+                  ReplicatedConfiguration replicatedConfiguration) {
     this.repoManager = repoManager;
     this.allUsersName = allUsersName;
+    this.replicatedConfiguration = replicatedConfiguration;
   }
 
   public int nextAccountId() throws OrmException {
     RepoSequence accountSeq =
         new RepoSequence(
+            replicatedConfiguration,
             repoManager,
             GitReferenceUpdated.DISABLED,
             new Project.NameKey(allUsersName.get()),

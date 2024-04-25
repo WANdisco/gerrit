@@ -90,7 +90,7 @@ public interface ProjectCache {
   /** @return sorted iteration of projects. */
   ImmutableSortedSet<Project.NameKey> all();
 
-  /**
+ /**
    * @return estimated set of relevant groups extracted from hot project access rules. If the cache
    *     is cold or too small for the entire project set of the server, this set may be incomplete.
    */
@@ -104,6 +104,8 @@ public interface ProjectCache {
    */
   ImmutableSortedSet<Project.NameKey> byName(String prefix);
 
-  /** Notify the cache that a new project was constructed. */
-  void onCreateProject(Project.NameKey newProjectName) throws IOException;
+  /**
+   *  Notify the cache that a new project was constructed. */
+  void onCreateProject(Project.NameKey newProjectName, final String ref) throws IOException;
+
 }

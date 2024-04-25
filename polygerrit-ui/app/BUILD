@@ -135,6 +135,7 @@ DIRECTORIES = [
         "local",
         "manual",
         "template",
+        "disabled"
     ],
 ) for directory in DIRECTORIES]
 

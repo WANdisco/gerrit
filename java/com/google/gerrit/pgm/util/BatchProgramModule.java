@@ -115,6 +115,10 @@ public class BatchProgramModule extends FactoryModule {
     install(PatchListCacheImpl.module());
     install(new DefaultUrlFormatter.Module());
 
+    /* BatchProgramModule is used by Reindex and RebuildNoteDb entry-points. These should not be replicated.
+     Here we are setting a wandisco section and key/val pair for stating that replication is disabled */
+    cfg.setBoolean("wandisco", null, "gerritmsReplicationDisabled", true);
+
     // There is the concept of LifecycleModule, in Gerrit's own extension to Guice, which has these:
     //  listener().to(SomeClassImplementingLifecycleListener.class);
     // and the start() methods of each such listener are executed in the order they are declared.

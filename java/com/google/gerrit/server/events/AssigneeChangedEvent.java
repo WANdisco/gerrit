@@ -18,6 +18,7 @@ import com.google.common.base.Supplier;
 import com.google.gerrit.reviewdb.client.Change;
 import com.google.gerrit.server.data.AccountAttribute;
 
+@isReplicatedServerEvent
 public class AssigneeChangedEvent extends ChangeEvent {
   static final String TYPE = "assignee-changed";
   public Supplier<AccountAttribute> changer;
@@ -26,4 +27,5 @@ public class AssigneeChangedEvent extends ChangeEvent {
   public AssigneeChangedEvent(Change change) {
     super(TYPE, change);
   }
+
 }

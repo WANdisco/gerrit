@@ -28,6 +28,7 @@ import com.google.gerrit.index.SiteIndexer;
 import com.google.gerrit.lifecycle.LifecycleManager;
 import com.google.gerrit.lucene.LuceneIndexModule;
 import com.google.gerrit.pgm.util.BatchProgramModule;
+import com.google.gerrit.server.util.GuiceUtils;
 import com.google.gerrit.pgm.util.SiteProgram;
 import com.google.gerrit.pgm.util.ThreadLimiter;
 import com.google.gerrit.server.change.ChangeResource;
@@ -37,6 +38,9 @@ import com.google.gerrit.server.index.IndexModule;
 import com.google.gerrit.server.index.IndexModule.IndexType;
 import com.google.gerrit.server.index.change.ChangeSchemaDefinitions;
 import com.google.gerrit.server.plugins.PluginGuiceEnvironment;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Key;
@@ -51,6 +55,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import org.eclipse.jgit.lib.Config;
+import org.eclipse.jgit.util.ReplicationConfiguration;
 import org.eclipse.jgit.util.io.NullOutputStream;
 import org.kohsuke.args4j.Option;
 
@@ -93,6 +98,9 @@ public class Reindex extends SiteProgram {
     dbManager.add(dbInjector);
     dbManager.start();
 
+    // GER-1889: We cannot allow the plugin environment to copy instance information when in a shared context.
+    PluginGuiceEnvironment.setAllowCopyOfReplicatedCoordinatorInstance(false);
+    
     sysInjector = createSysInjector();
     sysInjector.getInstance(PluginGuiceEnvironment.class).setDbCfgInjector(dbInjector, cfgInjector);
     LifecycleManager sysManager = new LifecycleManager();
@@ -169,6 +177,16 @@ public class Reindex extends SiteProgram {
     }
     modules.add(indexModule);
     modules.add(dbInjector.getInstance(BatchProgramModule.class));
+
+    if(!GuiceUtils.hasBinding(dbInjector, ReplicationConfiguration.class)){
+      modules.add(new ReplicatedConfiguration.Module());
+    }
+
+    // if replicatedConfiguration was ever true, then we would need to bind a real ReplicatedEventsCoordinatorImpl
+    if(!GuiceUtils.hasBinding(dbInjector, ReplicatedEventsCoordinator.class)) {
+      modules.add(new NonReplicatedCoordinatorModule());
+    }
+
     modules.add(
         new FactoryModule() {
           @Override

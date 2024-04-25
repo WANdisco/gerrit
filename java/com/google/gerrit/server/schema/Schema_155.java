@@ -20,6 +20,7 @@ import com.google.gerrit.server.config.AllUsersName;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.notedb.RepoSequence;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import com.google.gwtorm.server.OrmException;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
@@ -29,13 +30,15 @@ import java.sql.SQLException;
 public class Schema_155 extends SchemaVersion {
   private final GitRepositoryManager repoManager;
   private final AllUsersName allUsersName;
+  private final ReplicatedConfiguration replicatedConfiguration;
 
   @Inject
   Schema_155(
-      Provider<Schema_154> prior, GitRepositoryManager repoManager, AllUsersName allUsersName) {
+      Provider<Schema_154> prior, GitRepositoryManager repoManager, AllUsersName allUsersName, ReplicatedConfiguration replicatedConfiguration) {
     super(prior);
     this.repoManager = repoManager;
     this.allUsersName = allUsersName;
+    this.replicatedConfiguration = replicatedConfiguration;
   }
 
   @Override
@@ -44,6 +47,7 @@ public class Schema_155 extends SchemaVersion {
     RepoSequence.Seed accountSeed = db::nextAccountId;
     RepoSequence accountSeq =
         new RepoSequence(
+            replicatedConfiguration,
             repoManager,
             GitReferenceUpdated.DISABLED,
             allUsersName,

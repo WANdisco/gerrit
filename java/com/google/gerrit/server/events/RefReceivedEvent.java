@@ -17,6 +17,7 @@ import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.server.IdentifiedUser;
 import org.eclipse.jgit.transport.ReceiveCommand;
 
+@isReplicatedServerEvent
 public class RefReceivedEvent extends RefEvent {
   static final String TYPE = "ref-received";
   public ReceiveCommand command;

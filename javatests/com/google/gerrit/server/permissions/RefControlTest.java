@@ -64,6 +64,7 @@ import com.google.gerrit.server.project.ProjectConfig;
 import com.google.gerrit.server.project.ProjectState;
 import com.google.gerrit.server.project.RefPattern;
 import com.google.gerrit.server.project.testing.Util;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.server.schema.SchemaCreator;
 import com.google.gerrit.server.util.RequestContext;
 import com.google.gerrit.server.util.ThreadLocalRequestContext;
@@ -75,6 +76,7 @@ import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Provider;
 import com.google.inject.util.Providers;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -83,6 +85,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
 import org.eclipse.jgit.errors.ConfigInvalidException;
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.lib.Repository;
@@ -223,6 +226,7 @@ public class RefControlTest {
   @Inject private TransferConfig transferConfig;
   @Inject private MetricMaker metricMaker;
   @Inject private RefVisibilityControl refVisibilityControl;
+  @Inject private ReplicatedEventsCoordinator replicatedEventsCoordinator;
 
   @Before
   public void setUp() throws Exception {
@@ -245,13 +249,16 @@ public class RefControlTest {
           }
 
           @Override
-          public void evict(Project p) {}
+          public void evict(Project p) {
+          }
 
           @Override
-          public void remove(Project p) {}
+          public void remove(Project p) {
+          }
 
           @Override
-          public void remove(Project.NameKey name) {}
+          public void remove(Project.NameKey name) {
+          }
 
           @Override
           public ImmutableSortedSet<Project.NameKey> all() {
@@ -264,7 +271,9 @@ public class RefControlTest {
           }
 
           @Override
-          public void onCreateProject(Project.NameKey newProjectName) {}
+          public void onCreateProject(Project.NameKey newProjectName, String ref) throws IOException {
+
+          }
 
           @Override
           public Set<AccountGroup.UUID> guessRelevantGroupUUIDs() {
@@ -277,7 +286,8 @@ public class RefControlTest {
           }
 
           @Override
-          public void evict(Project.NameKey p) {}
+          public void evict(Project.NameKey p) {
+          }
 
           @Override
           public ProjectState checkedGet(Project.NameKey projectName, boolean strict)
@@ -315,7 +325,7 @@ public class RefControlTest {
 
     Cache<SectionSortCache.EntryKey, SectionSortCache.EntryVal> c =
         CacheBuilder.newBuilder().build();
-    sectionSorter = new PermissionCollection.Factory(new SectionSortCache(c), metricMaker);
+    sectionSorter = new PermissionCollection.Factory(new SectionSortCache(c, replicatedEventsCoordinator), metricMaker);
 
     parent = new ProjectConfig(parentKey);
     parent.load(newRepository(parentKey));
@@ -1086,7 +1096,8 @@ public class RefControlTest {
   }
 
   private static class MockUser extends CurrentUser {
-    @Nullable private final String username;
+    @Nullable
+    private final String username;
     private final GroupMembership groups;
 
     MockUser(@Nullable String name, AccountGroup.UUID[] groupId) {

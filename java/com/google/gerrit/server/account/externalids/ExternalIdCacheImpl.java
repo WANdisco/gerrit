@@ -24,6 +24,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.reviewdb.client.Account;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
@@ -46,16 +47,35 @@ class ExternalIdCacheImpl implements ExternalIdCache {
   private final LoadingCache<ObjectId, AllExternalIds> extIdsByAccount;
   private final ExternalIdReader externalIdReader;
   private final Lock lock;
+  private ReplicatedEventsCoordinator replicatedEventsCoordinator;
 
   @Inject
   ExternalIdCacheImpl(
       @Named(CACHE_NAME) LoadingCache<ObjectId, AllExternalIds> extIdsByAccount,
-      ExternalIdReader externalIdReader) {
+      ExternalIdReader externalIdReader, ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.extIdsByAccount = extIdsByAccount;
     this.externalIdReader = externalIdReader;
     this.lock = new ReentrantLock(true /* fair */);
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+
+    attachToReplication();
   }
 
+
+  /**
+   * Attach to replication the caches that this object uses.
+   * N.B. we do not need to hook in the cache listeners if replication is disabled.
+   */
+  final void attachToReplication() {
+    if (! replicatedEventsCoordinator.isReplicationEnabled()) {
+      logger.atInfo().log("Replication is disabled - not hooking in ExternalIdCache listeners.");
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(CACHE_NAME, this.extIdsByAccount);
+  }
+
+  // TODO: (trevorg) GER-944 consider is ths onReplace doing any deletions that we need to convey a eviction?
+  //  Is it an update, picked up via our listener already, or is it being ignored leading to stale data in remote index.?
   @Override
   public void onReplace(
       ObjectId oldNotesRev,

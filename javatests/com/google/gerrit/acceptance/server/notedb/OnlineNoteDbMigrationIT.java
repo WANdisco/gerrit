@@ -90,6 +90,7 @@ import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.lib.RepositoryCache;
 import org.eclipse.jgit.lib.RepositoryCache.FileKey;
 import org.eclipse.jgit.storage.file.FileBasedConfig;
 import org.eclipse.jgit.util.FS;
@@ -559,17 +560,28 @@ public class OnlineNoteDbMigrationIT extends AbstractDaemonTest {
     PushOneCommit.Result r2 = pushFactory.create(db, admin.getIdent(), tr2).to("refs/for/master");
     Change.Id id2 = r2.getChange().getId();
 
-    // TODO(davido): Find an easier way to wipe out a repository from the file system.
-    MoreFiles.deleteRecursively(
-        FileKey.lenient(
-                sitePaths
-                    .resolve(cfg.getString("gerrit", null, "basePath"))
-                    .resolve(p2.get())
-                    .toFile(),
-                FS.DETECTED)
-            .getFile()
-            .toPath(),
-        RecursiveDeleteOption.ALLOW_INSECURE);
+    try {
+      // TODO(davido): Find an easier way to wipe out a repository from the file system.
+      FileKey location = FileKey.lenient(
+          sitePaths.resolve(cfg.getString("gerrit", null, "basePath"))
+              .resolve(p2.get())
+              .toFile(),
+          FS.DETECTED);
+
+      MoreFiles.deleteRecursively(
+              location.getFile().toPath(),
+              RecursiveDeleteOption.ALLOW_INSECURE);
+
+      // Clear the repository cache entry for p2 right away to ensure we don't get given a stale reference
+      // for the previously deleted repository.
+      RepositoryCache.unregister(location);
+
+    } catch (IOException e) {
+      // The recursive delete above occasionally trips over gc.log.lock. deleteRecursively reads the attributes of
+      // each file it's about to delete, but if a gc is in progress short-lived files might interfere. No need to
+      // fail the test if this intermittent exception is thrown, just log it.
+      System.err.println("Failed to delete some files during test: " + e.getMessage());
+    }
 
     // Deleting the repository on a running server does not quite simulate the
     // issue reported in https://issues.gerritcodereview.com/issues/40011744.

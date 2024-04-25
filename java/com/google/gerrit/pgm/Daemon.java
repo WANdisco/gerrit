@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,6 +64,7 @@ import com.google.gerrit.pgm.http.jetty.JettyEnv;
 import com.google.gerrit.pgm.http.jetty.JettyModule;
 import com.google.gerrit.pgm.http.jetty.ProjectQoSFilter;
 import com.google.gerrit.pgm.util.ErrorLogFile;
+import com.google.gerrit.server.util.GuiceUtils;
 import com.google.gerrit.pgm.util.LogFileCompressor;
 import com.google.gerrit.pgm.util.RuntimeShutdown;
 import com.google.gerrit.pgm.util.SiteProgram;
@@ -99,6 +113,10 @@ import com.google.gerrit.server.permissions.DefaultPermissionBackendModule;
 import com.google.gerrit.server.plugins.PluginGuiceEnvironment;
 import com.google.gerrit.server.plugins.PluginModule;
 import com.google.gerrit.server.project.DefaultProjectNameLockManager;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
+import com.google.gerrit.server.replication.modules.ReplicationModule;
 import com.google.gerrit.server.restapi.RestApiModule;
 import com.google.gerrit.server.schema.DataSourceProvider;
 import com.google.gerrit.server.schema.InMemoryAccountPatchReviewStore;
@@ -283,8 +301,11 @@ public class Daemon extends SiteProgram {
             logger.atInfo().log("caught shutdown, cleaning up");
             stop();
           });
-
       logger.atInfo().log("Gerrit Code Review %s ready", myVersion());
+
+      // Signal all waiting contexts that we are up and running
+      LifecycleManager.started();
+
       if (runId != null) {
         try {
           Files.write(runFile, (runId + "\n").getBytes(UTF_8));
@@ -350,19 +371,24 @@ public class Daemon extends SiteProgram {
 
   @VisibleForTesting
   public void start() throws IOException {
+    ErrorLogFile.initLoggingBridge();
     if (dbInjector == null) {
       dbInjector = createDbInjector(true /* enableMetrics */, MULTI_USER);
     }
     cfgInjector = createCfgInjector();
     config = cfgInjector.getInstance(Key.get(Config.class, GerritServerConfig.class));
-    initIndexType();
-    sysInjector = createSysInjector();
-    sysInjector.getInstance(PluginGuiceEnvironment.class).setDbCfgInjector(dbInjector, cfgInjector);
-    manager.add(dbInjector, cfgInjector, sysInjector);
-
     if (!consoleLog) {
       manager.add(ErrorLogFile.start(getSitePath(), config));
     }
+    initIndexType();
+    sysInjector = createSysInjector();
+    sysInjector.getInstance(PluginGuiceEnvironment.class)
+        .setDbCfgInjector(dbInjector, cfgInjector);
+
+    sysInjector.getInstance(ReplicatedEventsCoordinator.class)
+        .setSysInjector(sysInjector);
+
+    manager.add(dbInjector, cfgInjector, sysInjector);
 
     sshd &= !sshdOff();
     if (sshd) {
@@ -374,6 +400,7 @@ public class Daemon extends SiteProgram {
     }
 
     manager.start();
+
   }
 
   @VisibleForTesting
@@ -411,6 +438,12 @@ public class Daemon extends SiteProgram {
 
   private Injector createCfgInjector() {
     final List<Module> modules = new ArrayList<>();
+
+    // Only bind this module if it is not an InMemory test and we haven't already bound the class
+    if(!inMemoryTest && !GuiceUtils.hasBinding(dbInjector, ReplicatedConfiguration.class)) {
+      modules.add(new ReplicatedConfiguration.Module());
+    }
+
     modules.add(new AuthConfigModule());
     return dbInjector.createChildInjector(modules);
   }
@@ -428,6 +461,19 @@ public class Daemon extends SiteProgram {
     modules.add(new WorkQueue.Module());
     modules.add(new StreamEventsApiListener.Module());
     modules.add(new EventBroker.Module());
+
+    if(!inMemoryTest) {
+      /** Add all replication modules now */
+      ReplicatedConfiguration replicatedConfiguration =
+          cfgInjector.getInstance(ReplicatedConfiguration.class);
+      if (!replicatedConfiguration.getAllowReplication().isReplicationEnabled()) {
+        //if replication is disabled then use the dummy module
+        modules.add(new NonReplicatedCoordinatorModule());
+      } else {
+        modules.add(new ReplicationModule());
+      }
+    }
+
     modules.add(
         inMemoryTest
             ? new InMemoryAccountPatchReviewStore.Module()

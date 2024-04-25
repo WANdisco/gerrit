@@ -17,11 +17,14 @@ package com.google.gerrit.server.change;
 import static com.google.common.truth.Truth.assertThat;
 
 import java.io.IOException;
+
+import com.google.common.truth.Correspondence;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.MergeCommand.FastForwardMode;
 import org.eclipse.jgit.junit.RepositoryTestCase;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTag;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -135,8 +138,8 @@ public class IncludedInResolverTest extends RepositoryTestCase {
     IncludedInResolver.Result detail = resolve(commit_v2_5);
 
     // Check that only tags and branches which refer the tip are returned
-    assertThat(detail.tags()).containsExactly(TAG_2_5, TAG_2_5_ANNOTATED, TAG_2_5_ANNOTATED_TWICE);
-    assertThat(detail.branches()).containsExactly(BRANCH_2_5);
+    assertThat(detail.tags()).comparingElementsUsing(hasShortName()).containsExactly(TAG_2_5, TAG_2_5_ANNOTATED, TAG_2_5_ANNOTATED_TWICE);
+    assertThat(detail.branches()).comparingElementsUsing(hasShortName()).containsExactly(BRANCH_2_5);
   }
 
   @Test
@@ -146,6 +149,7 @@ public class IncludedInResolverTest extends RepositoryTestCase {
 
     // Check whether all tags and branches are returned
     assertThat(detail.tags())
+        .comparingElementsUsing(hasShortName())
         .containsExactly(
             TAG_1_0,
             TAG_1_0_1,
@@ -156,6 +160,7 @@ public class IncludedInResolverTest extends RepositoryTestCase {
             TAG_2_5_ANNOTATED,
             TAG_2_5_ANNOTATED_TWICE);
     assertThat(detail.branches())
+        .comparingElementsUsing(hasShortName())
         .containsExactly(BRANCH_MASTER, BRANCH_1_0, BRANCH_1_3, BRANCH_2_0, BRANCH_2_5);
   }
 
@@ -166,8 +171,9 @@ public class IncludedInResolverTest extends RepositoryTestCase {
 
     // Check whether all succeeding tags and branches are returned
     assertThat(detail.tags())
+        .comparingElementsUsing(hasShortName())
         .containsExactly(TAG_1_3, TAG_2_5, TAG_2_5_ANNOTATED, TAG_2_5_ANNOTATED_TWICE);
-    assertThat(detail.branches()).containsExactly(BRANCH_1_3, BRANCH_2_5);
+    assertThat(detail.branches()).comparingElementsUsing(hasShortName()).containsExactly(BRANCH_1_3, BRANCH_2_5);
   }
 
   private IncludedInResolver.Result resolve(RevCommit commit) throws Exception {
@@ -178,5 +184,23 @@ public class IncludedInResolverTest extends RepositoryTestCase {
     String fullBranchName = "refs/heads/" + branchName;
     super.createBranch(objectId, fullBranchName);
     super.checkoutBranch(fullBranchName);
+  }
+
+  // 3.1 uses a later version of Google Truth for testing, which has shorthand lambdas for creating these
+  // "Correspondence" type objects. Essentially they can be injected into an assertion to perform some
+  // manipulation of an object before comparison, e.g. this test was previously written with short refnames
+  // in mind, but the code was updated to return Ref objects.
+  private static Correspondence<Ref, String> hasShortName() {
+    return new Correspondence<Ref, String>() {
+      @Override
+      public boolean compare(Ref actual, String expected) {
+        return expected.equals(Repository.shortenRefName(actual.getName()));
+      }
+
+      @Override
+      public String toString() {
+        return "has short name";
+      }
+    };
   }
 }

@@ -1,0 +1,15 @@
+features:
+  - Reduce the size of agreements / proposals being passed around the system.
+  - Reimplement Gerrit Event Replication for higher scalability
+  - Reflog updates now occur server-side when core.logallrefupdates=true (note "always" value is not supported)
+  - New property flag, gerrit.replicated.filesystem.resolution.ms has been added to govern the wait state during event processing.
+  - New property flags, gerrit.replicated.events.enabled.receive whether to read the incoming server events or not, and gerrit.replicated.events.enabled.receive.original publish replicated events to the local site event stream or not.
+  - Reno Release notes support
+issues:
+  - Gerrit scp command for commit hooks requires extra flag when called from newer ssh clients. See the following Knowledge base article 'https://community.cirata.com/s/article/Known-Issue-Gerrit-scp-command-for-commit-hooks-requires-extra-flag-when-called-from-newer-ssh-clients' for more information.
+deprecations:
+  - Property removed, gerrit.replicated.cache.enabled, and should not be used.
+security:
+  - Backport security fix from Gerrit 3.1 to prevent inappropriate ref disclosure
+fixes:
+  - Replicated handling can now dispatch failures which are transitory in nature for AUTO_RETRY on remote and local nodes.

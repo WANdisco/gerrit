@@ -19,6 +19,7 @@ import java.util.Arrays;
 import org.eclipse.jgit.revwalk.FooterKey;
 
 /** State of a reviewer on a change. */
+@SuppressWarnings("ImmutableEnumChecker")
 public enum ReviewerStateInternal {
   /** The user has contributed at least one nonzero vote on the change. */
   REVIEWER(new FooterKey("Reviewer"), ReviewerState.REVIEWER),
