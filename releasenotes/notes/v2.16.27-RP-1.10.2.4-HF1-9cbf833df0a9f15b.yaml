@@ -1,0 +1,6 @@
+---
+issues:
+  - "Open changes not removed in UI when force clean-up is selected and left in replication. See the following Knowledge base article for more information: https://community.wandisco.com/s/article/known-issue-open-changes-not-removed"
+  - "Gerrit scp command for commit hooks requires extra flag when called from newer ssh clients. See the following Knowledge base article for more information: https://community.cirata.com/s/article/Known-Issue-Gerrit-scp-command-for-commit-hooks-requires-extra-flag-when-called-from-newer-ssh-clients"
+fixes:
+  - Minimize pack file size for replicating repository updates

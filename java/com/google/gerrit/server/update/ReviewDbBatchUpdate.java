@@ -58,6 +58,7 @@ import com.google.gerrit.server.notedb.NoteDbChangeState.PrimaryStorage;
 import com.google.gerrit.server.notedb.NoteDbUpdateManager;
 import com.google.gerrit.server.notedb.NoteDbUpdateManager.MismatchedStateException;
 import com.google.gerrit.server.notedb.NotesMigration;
+import com.google.gerrit.server.replication.ReplicatedIndexEventManager;
 import com.google.gwtorm.server.OrmException;
 import com.google.gwtorm.server.SchemaFactory;
 import com.google.inject.Inject;
@@ -495,7 +496,7 @@ public class ReviewDbBatchUpdate extends BatchUpdate {
     // Reindex changes.
     for (ChangeTask task : tasks) {
       if (task.deleted) {
-        indexFutures.add(indexer.deleteAsync(task.id));
+        indexFutures.add(indexer.deleteAsync(project, task.id));
       } else if (task.dirty) {
         indexFutures.add(indexer.indexAsync(project, task.id));
       }
