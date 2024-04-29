@@ -34,3 +34,12 @@
 *~
 .primary_build_tool
 .gwt_work_dir
+*.iml
+release.war
+target
+
+env\.properties
+
+**/.classpath
+**/.project
+**/.settings/
