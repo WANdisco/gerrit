@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +31,7 @@ import static com.google.gerrit.reviewdb.client.AccountExternalId.SCHEME_USERNAM
 
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.gerrit.common.ReplicatedCacheManager;
 import com.google.gerrit.reviewdb.client.AccountExternalId;
 import com.google.gerrit.reviewdb.client.AccountSshKey;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -79,6 +93,11 @@ public class SshKeyCacheImpl implements SshKeyCache {
   SshKeyCacheImpl(
       @Named(CACHE_NAME) LoadingCache<String, Iterable<SshKeyCacheEntry>> cache) {
     this.cache = cache;
+    attachToReplication();
+  }
+  
+  final void attachToReplication() {
+    ReplicatedCacheManager.watchCache(CACHE_NAME, this.cache);
   }
 
   Iterable<SshKeyCacheEntry> get(String username) {
@@ -94,6 +113,7 @@ public class SshKeyCacheImpl implements SshKeyCache {
   public void evict(String username) {
     if (username != null) {
       cache.invalidate(username);
+      ReplicatedCacheManager.replicateEvictionFromCache(CACHE_NAME,username);
     }
   }
 

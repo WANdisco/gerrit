@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2011 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +30,7 @@ package com.google.gerrit.server.account;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
+import com.google.gerrit.common.ReplicatedCacheManager;
 import com.google.gerrit.reviewdb.client.AccountGroup;
 import com.google.gerrit.reviewdb.client.AccountGroupById;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -83,8 +97,16 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
     this.subgroups = subgroups;
     this.parentGroups = parentGroups;
     this.external = external;
+  
+    attachToReplication();
   }
 
+  final void attachToReplication() {
+    ReplicatedCacheManager.watchCache(PARENT_GROUPS_NAME, this.parentGroups);
+    ReplicatedCacheManager.watchCache(SUBGROUPS_NAME, this.subgroups);
+    ReplicatedCacheManager.watchCache(EXTERNAL_NAME, this.external);
+  }
+  
   @Override
   public Set<AccountGroup.UUID> subgroupsOf(AccountGroup.UUID groupId) {
     try {
@@ -109,6 +131,7 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
   public void evictSubgroupsOf(AccountGroup.UUID groupId) {
     if (groupId != null) {
       subgroups.invalidate(groupId);
+      ReplicatedCacheManager.replicateEvictionFromCache(SUBGROUPS_NAME,groupId);
     }
   }
 
@@ -116,9 +139,11 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
   public void evictParentGroupsOf(AccountGroup.UUID groupId) {
     if (groupId != null) {
       parentGroups.invalidate(groupId);
+      ReplicatedCacheManager.replicateEvictionFromCache(PARENT_GROUPS_NAME,groupId);
 
       if (!AccountGroup.isInternalGroup(groupId)) {
         external.invalidate(EXTERNAL_NAME);
+        ReplicatedCacheManager.replicateEvictionFromCache(EXTERNAL_NAME,groupId);
       }
     }
   }
