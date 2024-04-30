@@ -215,6 +215,7 @@ public class Daemon extends SiteProgram {
       });
 
       log.info("Gerrit Code Review " + myVersion() + " ready");
+      LifecycleManager.started();
       if (runId != null) {
         try {
           runFile.createNewFile();
