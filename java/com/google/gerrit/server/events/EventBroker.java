@@ -24,6 +24,7 @@ import com.google.gerrit.reviewdb.client.PatchSet;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.server.ReviewDb;
 import com.google.gerrit.server.CurrentUser;
+import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.notedb.ChangeNotes;
 import com.google.gerrit.server.permissions.ChangePermission;
 import com.google.gerrit.server.permissions.PermissionBackend;
@@ -36,11 +37,16 @@ import com.google.gerrit.server.project.NoSuchChangeException;
 import com.google.gerrit.server.project.ProjectCache;
 import com.google.gerrit.server.project.ProjectState;
 import com.google.gwtorm.server.OrmException;
+import com.google.gwtorm.server.SchemaFactory;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
+import com.google.inject.util.Providers;
+import org.eclipse.jgit.lib.Config;
 
-/** Distributes Events to listeners if they are allowed to see them */
+/**
+ * Distributes Events to listeners if they are allowed to see them
+ */
 @Singleton
 public class EventBroker implements EventDispatcher {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -53,18 +59,24 @@ public class EventBroker implements EventDispatcher {
     }
   }
 
-  /** Listeners to receive changes as they happen (limited by visibility of user). */
+  /**
+   * Listeners to receive changes as they happen (limited by visibility of user).
+   */
   protected final PluginSetContext<UserScopedEventListener> listeners;
 
-  /** Listeners to receive all changes as they happen. */
+  /**
+   * Listeners to receive all changes as they happen.
+   */
   protected final PluginSetContext<EventListener> unrestrictedListeners;
 
   private final PermissionBackend permissionBackend;
   protected final ProjectCache projectCache;
-
   protected final ChangeNotes.Factory notesFactory;
-
   protected final Provider<ReviewDb> dbProvider;
+
+  // Use schemaFactory directly as we can't use Request Scoped Providers for items that can cause writes / migration
+  // to happen - or if the change it is passed came from request scope.
+  private final SchemaFactory<ReviewDb> schemaFactory;
 
   @Inject
   public EventBroker(
@@ -73,14 +85,30 @@ public class EventBroker implements EventDispatcher {
       PermissionBackend permissionBackend,
       ProjectCache projectCache,
       ChangeNotes.Factory notesFactory,
-      Provider<ReviewDb> dbProvider) {
+      Provider<ReviewDb> dbProvider,
+      SchemaFactory<ReviewDb> schemaFactory,
+      @GerritServerConfig Config config
+  ) {
     this.listeners = listeners;
     this.unrestrictedListeners = unrestrictedListeners;
     this.permissionBackend = permissionBackend;
     this.projectCache = projectCache;
     this.notesFactory = notesFactory;
     this.dbProvider = dbProvider;
+    this.schemaFactory = schemaFactory;
   }
+
+  /**
+   * Please note as this returns a Provider of a ReviewDB.  As such the instance of the DB isn't really open until
+   * the provider.get() is used.  Allowing tidy try( ReviewDb db = provider.get() ) blocks to be used.
+   *
+   * @return Provider<ReviewDB> instance
+   * @throws OrmException
+   */
+  public Provider<ReviewDb> getReviewDbProvider() throws OrmException {
+    return Providers.of(schemaFactory.open());
+  }
+
 
   @Override
   public void postEvent(Change change, ChangeEvent event)
@@ -173,8 +201,12 @@ public class EventBroker implements EventDispatcher {
     if (pe == null || !pe.statePermitsRead()) {
       return false;
     }
-    ReviewDb db = dbProvider.get();
-    try {
+
+    // Use Thread Request scope, as the createChecked below may cause a read/write during migration from
+    // review to note DB.
+    // N.B. This change should be reverted when we move over to 3.0+ -> see 3.x branch for the
+    // new code which should work again
+    try ( ReviewDb db = getReviewDbProvider().get() ) {
       permissionBackend
           .user(user)
           .change(notesFactory.createChecked(db, change))
@@ -225,4 +257,18 @@ public class EventBroker implements EventDispatcher {
     }
     return true;
   }
+
+
+  /**
+   * This method updates the unrestricted set of listeners.
+   *
+   * We use this method, to add listeners without having them really be plugin contexts....
+   * TODO: (trevorg) Move ReplicationEventManager listener to be a plugin context and this can disappear.
+   * @param name
+   * @param unrestrictedListener
+   */
+  public void registerUnrestrictedEventListener(String name, EventListener unrestrictedListener) {
+    this.unrestrictedListeners.registerImplementation(name, unrestrictedListener);
+  }
+
 }

@@ -71,6 +71,7 @@ public abstract class CacheModule extends FactoryModule {
     CacheProvider<K, V> m =
         new CacheProvider<>(this, name, keyType, valType, CacheBackend.CAFFEINE);
     bindCache(m, name, keyType, valType);
+
     return m;
   }
 

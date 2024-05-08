@@ -2,7 +2,7 @@ workspace(name = "gerrit")
 
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
-load("//tools/bzl:maven_jar.bzl", "GERRIT", "MAVEN_LOCAL", "maven_jar")
+load("//tools/bzl:maven_jar.bzl", "GERRIT", "MAVEN_LOCAL", "WANDISCO_ASSETS", "maven_jar")
 load("//plugins:external_plugin_deps.bzl", "external_plugin_deps")
 load("//tools:nongoogle.bzl", "declare_nongoogle_deps")
 
@@ -245,9 +245,9 @@ maven_jar(
 )
 
 maven_jar(
-    name = "flogger-log4j-backend",
-    artifact = "com.google.flogger:flogger-log4j-backend:" + FLOGGER_VERS,
-    sha1 = "17aa5e31daa1354187e14b6978597d630391c028",
+    name = "flogger-slf4j-backend",
+    artifact = "com.google.flogger:flogger-slf4j-backend:" + FLOGGER_VERS,
+    sha1 = "0d211cf0e54bf05bda275c897bb3721614410efc",
 )
 
 maven_jar(
@@ -324,30 +324,36 @@ maven_jar(
     sha1 = "28c59f58f5adcc307604602e2aa89e2aca14c554",
 )
 
-SLF4J_VERS = "1.7.26"
+SLF4J_VERS = "1.7.5"
 
 maven_jar(
     name = "log-api",
     artifact = "org.slf4j:slf4j-api:" + SLF4J_VERS,
-    sha1 = "77100a62c2e6f04b53977b9f541044d7d722693d",
+    sha1 = "6b262da268f8ad9eff941b25503a9198f0a0ac93",
 )
 
 maven_jar(
     name = "log-ext",
     artifact = "org.slf4j:slf4j-ext:" + SLF4J_VERS,
-    sha1 = "31cdf122e000322e9efcb38913e9ab07825b17ef",
+    sha1 = "52b82b4ef19fbd6ef36e2142efc6760ae2eba2b8",
 )
 
 maven_jar(
     name = "impl-log4j",
     artifact = "org.slf4j:slf4j-log4j12:" + SLF4J_VERS,
-    sha1 = "12f5c685b71c3027fd28bcf90528ec4ec74bf818",
+    sha1 = "6edffc576ce104ec769d954618764f39f0f0f10d",
 )
 
 maven_jar(
     name = "jcl-over-slf4j",
     artifact = "org.slf4j:jcl-over-slf4j:" + SLF4J_VERS,
-    sha1 = "33fbc2d93de829fa5e263c5ce97f5eab8f57d53e",
+    sha1 = "0cd5970bd13fa85f7bed41ca606d6daf7cbf1365",
+)
+
+maven_jar(
+    name = "jul-to-slf4j",
+    artifact = "org.slf4j:jul-to-slf4j:" + SLF4J_VERS,
+    sha1 = "d2b0f76abde33a62f1dbc19a9da726ffe9a0180e",
 )
 
 maven_jar(
@@ -383,8 +389,8 @@ maven_jar(
 # When upgrading commons-compress, also upgrade tukaani-xz
 maven_jar(
     name = "commons-compress",
-    artifact = "org.apache.commons:commons-compress:1.15",
-    sha1 = "b686cd04abaef1ea7bc5e143c080563668eec17e",
+    artifact = "org.apache.commons:commons-compress:1.20",
+    sha1 = "b8df472b31e1f17c232d2ad78ceb1c84e00c641b",
 )
 
 maven_jar(
@@ -658,18 +664,18 @@ maven_jar(
     sha1 = "a3ae34e57fa8a4040e28247291d0cc3d6b8c7bcf",
 )
 
-AUTO_VALUE_VERSION = "1.6.2"
+AUTO_VALUE_VERSION = "1.7.4"
 
 maven_jar(
     name = "auto-value",
     artifact = "com.google.auto.value:auto-value:" + AUTO_VALUE_VERSION,
-    sha1 = "e7eae562942315a983eea3e191b72d755c153620",
+    sha1 = "6b126cb218af768339e4d6e95a9b0ae41f74e73d",
 )
 
 maven_jar(
     name = "auto-value-annotations",
     artifact = "com.google.auto.value:auto-value-annotations:" + AUTO_VALUE_VERSION,
-    sha1 = "ed193d86e0af90cc2342aedbe73c5d86b03fa09b",
+    sha1 = "eff48ed53995db2dadf0456426cc1f8700136f86",
 )
 
 declare_nongoogle_deps()
@@ -789,30 +795,63 @@ maven_jar(
 )
 
 # When updating Bouncy Castle, also update it in bazlets.
-BC_VERS = "1.60"
+BC_VERS = "1.61"
 
 maven_jar(
     name = "bcprov",
     artifact = "org.bouncycastle:bcprov-jdk15on:" + BC_VERS,
-    sha1 = "bd47ad3bd14b8e82595c7adaa143501e60842a84",
+    sha1 = "00df4b474e71be02c1349c3292d98886f888d1f7",
 )
 
 maven_jar(
     name = "bcpg",
     artifact = "org.bouncycastle:bcpg-jdk15on:" + BC_VERS,
-    sha1 = "13c7a199c484127daad298996e95818478431a2c",
+    sha1 = "422656435514ab8a28752b117d5d2646660a0ace",
 )
 
 maven_jar(
     name = "bcpkix",
     artifact = "org.bouncycastle:bcpkix-jdk15on:" + BC_VERS,
-    sha1 = "d0c46320fbc07be3a24eb13a56cee4e3d38e0c75",
+    sha1 = "89bb3aa5b98b48e584eee2a7401b7682a46779b4",
 )
 
 maven_jar(
     name = "h2",
     artifact = "com.h2database:h2:1.3.176",
     sha1 = "fd369423346b2f1525c413e33f8cf95b09c92cbd",
+)
+
+#MOCKITO
+
+maven_jar(
+    name = "mockito",
+    artifact = "org.mockito:mockito-core:2.28.2",
+    sha1 = "91110215a8cb9b77a46e045ee758f77d79167cc0",
+    deps = [
+        "@byte-buddy-agent//jar",
+        "@byte-buddy//jar",
+        "@objenesis-2//jar",
+    ],
+)
+
+BYTE_BUDDY_VERSION = "1.9.10"
+
+maven_jar(
+    name = "byte-buddy",
+    artifact = "net.bytebuddy:byte-buddy:" + BYTE_BUDDY_VERSION,
+    sha1 = "211a2b4d3df1eeef2a6cacf78d74a1f725e7a840",
+)
+
+maven_jar(
+    name = "byte-buddy-agent",
+    artifact = "net.bytebuddy:byte-buddy-agent:" + BYTE_BUDDY_VERSION,
+    sha1 = "9674aba5ee793e54b864952b001166848da0f26b",
+)
+
+maven_jar(
+    name = "objenesis-2",
+    artifact = "org.objenesis:objenesis:2.6",
+    sha1 = "639033469776fd37c08358c6b92a4761feb2af4b",
 )
 
 # Note that all of the following org.apache.httpcomponents have newer versions,
@@ -828,8 +867,8 @@ maven_jar(
 
 maven_jar(
     name = "httpclient",
-    artifact = "org.apache.httpcomponents:httpclient:" + HTTPCOMP_VERS,
-    sha1 = "016d0bc512222f1253ee6b64d389c84e22f697f0",
+    artifact = "org.apache.httpcomponents:httpclient:4.5.13",
+    sha1 = "e5f6cae5ca7ecaac1ec2827a9e2d65ae2869cada",
 )
 
 maven_jar(
@@ -904,66 +943,66 @@ maven_jar(
     sha1 = "75070c744a8e52a7d17b8b476468580309d5cd09",
 )
 
-JETTY_VERS = "9.4.30.v20200611"
+JETTY_VERS = "9.4.36.v20210114"
 
 maven_jar(
     name = "jetty-servlet",
     artifact = "org.eclipse.jetty:jetty-servlet:" + JETTY_VERS,
-    sha1 = "ca3dea2cd34ee88cec017001603af0c9e74781d6",
+    sha1 = "b189e52a5ee55ae172e4e99e29c5c314f5daf4b9",
 )
 
 maven_jar(
     name = "jetty-security",
     artifact = "org.eclipse.jetty:jetty-security:" + JETTY_VERS,
-    sha1 = "1a5261f6ad4081ad9e9bb01416d639931d391273",
+    sha1 = "42030d6ed7dfc0f75818cde0adcf738efc477574",
 )
 
 maven_jar(
     name = "jetty-servlets",
     artifact = "org.eclipse.jetty:jetty-servlets:" + JETTY_VERS,
-    sha1 = "3404a59996afbecd05d2504b07a765304546af07",
+    sha1 = "080d85ab9b82acb0af174ee5b6d5669b4ad3faf2",
 )
 
 maven_jar(
     name = "jetty-server",
     artifact = "org.eclipse.jetty:jetty-server:" + JETTY_VERS,
-    sha1 = "e5ede3724d062717d0c04e4c77f74fe8115c2a6f",
+    sha1 = "88a7d342974aadca658e7386e8d0fcc5c0788f41",
 )
 
 maven_jar(
     name = "jetty-jmx",
     artifact = "org.eclipse.jetty:jetty-jmx:" + JETTY_VERS,
-    sha1 = "653559eaec0f9a335a0d12e90bc764b28f341241",
+    sha1 = "bb3847eabe085832aeaedd30e872b40931632e54",
 )
 
 maven_jar(
     name = "jetty-continuation",
     artifact = "org.eclipse.jetty:jetty-continuation:" + JETTY_VERS,
-    sha1 = "2a9cd8c4cf392a7697a57665e7b0caf5bce4cd48",
+    sha1 = "84dcd3bc44258d6e2e552f59c77966c4ed252373",
 )
 
 maven_jar(
     name = "jetty-http",
     artifact = "org.eclipse.jetty:jetty-http:" + JETTY_VERS,
-    sha1 = "cd6223382e4f82b9ea807d8cdb04a23e5d629f1c",
+    sha1 = "1eee89a55e04ff94df0f85d95200fc48acb43d86",
 )
 
 maven_jar(
     name = "jetty-io",
     artifact = "org.eclipse.jetty:jetty-io:" + JETTY_VERS,
-    sha1 = "9c360d08e903b2dbd5d1f8e889a32046948628ce",
+    sha1 = "84a8faf9031eb45a5a2ddb7681e22c483d81ab3a",
 )
 
 maven_jar(
     name = "jetty-util",
     artifact = "org.eclipse.jetty:jetty-util:" + JETTY_VERS,
-    sha1 = "39ec6aa4745952077f5407cb1394d8ba2db88b13",
+    sha1 = "925257fbcca6b501a25252c7447dbedb021f7404",
 )
 
 maven_jar(
     name = "postgresql",
-    artifact = "org.postgresql:postgresql:42.2.5",
-    sha1 = "951b7eda125f3137538a94e2cbdcf744088ad4c2",
+    artifact = "org.postgresql:postgresql:42.2.18",
+    sha1 = "a0a9c1d43c7727eeaf1b729477891185d3c71751",
 )
 
 maven_jar(
@@ -987,8 +1026,8 @@ maven_jar(
 
 maven_jar(
     name = "commons-io",
-    artifact = "commons-io:commons-io:2.2",
-    sha1 = "83b5b8a7ba1c08f9e8c8ff2373724e33d3c1e22a",
+    artifact = "commons-io:commons-io:2.6",
+    sha1 = "815893df5f31da2ece4040fe0a12fd44b577afaf",
 )
 
 maven_jar(
@@ -998,9 +1037,38 @@ maven_jar(
 )
 
 maven_jar(
+    name = "jackson-core",
+    artifact = "com.fasterxml.jackson.core:jackson-core:2.11.2",
+    sha1 = "bc022ab0f0c83c07f9c52c5ab9a6a4932b15cc35",
+)
+
+#jackson-databind contains all appropriate classes we require in gerrit-gitms-interface
+#such as ObjectMapper, JsonNode etc
+maven_jar(
+    name = "jackson-databind",
+    artifact = "com.fasterxml.jackson.core:jackson-databind:2.11.2",
+)
+
+#This is required by jackson databind ObjectMapper
+maven_jar(
+    name = "jackson-annotations",
+    artifact = "com.fasterxml.jackson.core:jackson-annotations:2.11.2",
+)
+
+maven_jar(
     name = "javax-activation",
     artifact = "javax.activation:activation:1.1.1",
     sha1 = "485de3a253e23f645037828c07f1d7f1af40763a",
+)
+
+# WANdisco maven assets
+_GERRIT_GITMS_VERSION = "1.1.1.1"
+
+maven_jar(
+    name = "gerrit-gitms-interface",
+    artifact = "com.wandisco:gerrit-gitms-interface:" + _GERRIT_GITMS_VERSION,
+    repository = WANDISCO_ASSETS,
+        sha1 = "e3e1e99861016b2f92a3586aa61861297c066b84",
 )
 
 load("//tools/bzl:js.bzl", "bower_archive", "npm_binary")

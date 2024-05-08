@@ -38,6 +38,7 @@ import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.client.RefNames;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
 import com.google.gerrit.server.git.GitRepositoryManager;
+import com.google.gerrit.server.replication.Replicator;
 import com.google.gwtorm.server.OrmException;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -47,6 +48,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import com.wandisco.gerrit.gitms.shared.api.exceptions.GitUpdateException;
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectInserter;
@@ -75,17 +78,30 @@ public class RepoSequence {
   }
 
   @VisibleForTesting
-  static RetryerBuilder<RefUpdate.Result> retryerBuilder() {
+  public static RetryerBuilder<RefUpdate.Result> retryerBuilder() {
+    return retryerBuilder(30);
+  }
+
+  @VisibleForTesting
+  static RetryerBuilder<RefUpdate.Result> retryerBuilder(int stopDelay) {
     return RetryerBuilder.<RefUpdate.Result>newBuilder()
-        .retryIfResult(Predicates.equalTo(RefUpdate.Result.LOCK_FAILURE))
+            .retryIfResult(Predicates.or(Predicates.equalTo(Result.LOCK_FAILURE),
+                                         Predicates.equalTo(Result.REJECTED_OTHER_REASON)))
         .withWaitStrategy(
             WaitStrategies.join(
                 WaitStrategies.exponentialWait(5, TimeUnit.SECONDS),
                 WaitStrategies.randomWait(50, TimeUnit.MILLISECONDS)))
-        .withStopStrategy(StopStrategies.stopAfterDelay(30, TimeUnit.SECONDS));
+        .withStopStrategy(StopStrategies.stopAfterDelay(stopDelay, TimeUnit.SECONDS));
   }
 
-  private static final Retryer<RefUpdate.Result> RETRYER = retryerBuilder().build();
+  public static void setSequenceRetryMaxTimeoutSecs(int sequenceRetryMaxTimeoutSecsIn){
+    //need to rebuild with the given retry timeout
+    RETRYER = retryerBuilder(sequenceRetryMaxTimeoutSecsIn).build();
+  }
+
+  public static final String SEQUENCE_TUPLE_DELIMITER = ":";
+
+  private static Retryer<RefUpdate.Result> RETRYER = retryerBuilder().build();
 
   private final GitRepositoryManager repoManager;
   private final GitReferenceUpdated gitRefUpdated;
@@ -93,7 +109,6 @@ public class RepoSequence {
   private final String refName;
   private final Seed seed;
   private final int floor;
-  private final int batchSize;
   private final Runnable afterReadRef;
   private final Retryer<RefUpdate.Result> retryer;
 
@@ -102,6 +117,8 @@ public class RepoSequence {
 
   private int limit;
   private int counter;
+
+  @VisibleForTesting final int batchSize;
 
   @VisibleForTesting int acquireCount;
 
@@ -145,7 +162,7 @@ public class RepoSequence {
   }
 
   @VisibleForTesting
-  RepoSequence(
+  public RepoSequence(
       GitRepositoryManager repoManager,
       GitReferenceUpdated gitRefUpdated,
       Project.NameKey projectName,
@@ -266,9 +283,8 @@ public class RepoSequence {
   }
 
   private void acquire(int count) throws OrmException {
-    try (Repository repo = repoManager.openRepository(projectName);
-        RevWalk rw = new RevWalk(repo)) {
-      TryAcquire attempt = new TryAcquire(repo, rw, count);
+    try {
+      TryAcquire attempt = new TryAcquire(count);
       checkResult(retryer.call(attempt));
       counter = attempt.next;
       limit = counter + count;
@@ -277,8 +293,6 @@ public class RepoSequence {
       if (e.getCause() != null) {
         Throwables.throwIfInstanceOf(e.getCause(), OrmException.class);
       }
-      throw new OrmException(e);
-    } catch (IOException e) {
       throw new OrmException(e);
     }
   }
@@ -294,32 +308,38 @@ public class RepoSequence {
   }
 
   private class TryAcquire implements Callable<RefUpdate.Result> {
-    private final Repository repo;
-    private final RevWalk rw;
     private final int count;
 
     private int next;
 
-    private TryAcquire(Repository repo, RevWalk rw, int count) {
-      this.repo = repo;
-      this.rw = rw;
+    private TryAcquire(int count) {
       this.count = count;
     }
 
     @Override
     public RefUpdate.Result call() throws Exception {
-      Ref ref = repo.exactRef(refName);
-      afterReadRef.run();
-      ObjectId oldId;
-      if (ref == null) {
-        oldId = ObjectId.zeroId();
-        next = seed.get();
-      } else {
-        oldId = ref.getObjectId();
-        next = parse(rw, oldId);
+      try (Repository repo = repoManager.openRepository(projectName);
+        RevWalk rw = new RevWalk(repo)){
+        Ref ref = repo.exactRef(refName);
+        afterReadRef.run();
+        ObjectId oldId;
+        if (ref == null) {
+          oldId = ObjectId.zeroId();
+          next = seed.get();
+        } else {
+          oldId = ref.getObjectId();
+          next = parse(rw, oldId);
+        }
+        next = Math.max(floor, next);
+        return store(repo, rw, oldId, next + count);
+      } catch (IOException e) {
+        if (e.getCause() != null && e.getCause() instanceof GitUpdateException) {
+          if (e.getCause().getMessage().contains("REJECTED_OTHER_REASON")) {
+            return Result.REJECTED_OTHER_REASON;
+          }
+        }
+        throw new OrmException(e);
       }
-      next = Math.max(floor, next);
-      return store(repo, rw, oldId, next + count);
     }
   }
 
@@ -361,7 +381,7 @@ public class RepoSequence {
       throw new IncorrectObjectTypeException(id, OBJ_BLOB);
     }
     String str = CharMatcher.whitespace().trimFrom(new String(ol.getCachedBytes(), UTF_8));
-    Integer val = Ints.tryParse(str);
+    Integer val = decodeSequenceString(str);
     if (val == null) {
       throw new OrmException("invalid value in " + refName + " blob at " + id.name());
     }
@@ -372,7 +392,7 @@ public class RepoSequence {
       throws IOException {
     ObjectId newId;
     try (ObjectInserter ins = repo.newObjectInserter()) {
-      newId = ins.insert(OBJ_BLOB, Integer.toString(val).getBytes(UTF_8));
+      newId = ins.insert(OBJ_BLOB, encodeSequenceString(val).getBytes(UTF_8));
       ins.flush();
     }
     RefUpdate ru = repo.updateRef(refName);
@@ -393,5 +413,33 @@ public class RepoSequence {
       throws IOException {
     ObjectId newId = ins.insert(OBJ_BLOB, Integer.toString(val).getBytes(UTF_8));
     return new ReceiveCommand(ObjectId.zeroId(), newId, RefNames.REFS_SEQUENCES + name);
+  }
+
+  /* Convert a given change sequence number into the content to store in the blob. For vanilla or non-replicated
+   * Gerrit this will just be the sequence number, but for replicated flow make a tuple incorporating node-id so that
+   * the blob sent to GitMS will hash differently. This will cause GitMS to differentiate sequence numbers coming from
+   * different nodes.
+   */
+  private static String encodeSequenceString(int val) {
+    // If replication is disabled, just store the sequence number directly as we don't need to disambiguate the blobs
+    // by node-id.
+    if (Replicator.isReplicationDisabled()) {
+      return Integer.toString(val);
+    }
+
+    // The format of the tuple in the replicated scenario will be NodeId:Sequence#.
+    final String nodeId = requireNonNull(Replicator.getInstance()).getThisNodeIdentity();
+    return String.format("%s%s%d", nodeId, SEQUENCE_TUPLE_DELIMITER, val);
+  }
+
+  /* Convert a sequenceString back into the expected sequence number. For vanilla or non-replicated Gerrit we only need
+   * parse the string as an int. For replicated flow we need to unpack the sequence number out of the encoded tuple.
+   */
+  public static Integer decodeSequenceString(String sequenceString) {
+    final int separatorIndex = sequenceString.lastIndexOf(SEQUENCE_TUPLE_DELIMITER);
+
+    return separatorIndex < 0 ?
+           Ints.tryParse(sequenceString) :
+           Ints.tryParse(sequenceString.substring(separatorIndex + SEQUENCE_TUPLE_DELIMITER.length()));
   }
 }

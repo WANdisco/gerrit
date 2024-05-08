@@ -75,6 +75,7 @@ import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Provider;
 import com.google.inject.util.Providers;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -83,6 +84,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
 import org.eclipse.jgit.errors.ConfigInvalidException;
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.lib.Repository;
@@ -245,13 +247,16 @@ public class RefControlTest {
           }
 
           @Override
-          public void evict(Project p) {}
+          public void evict(Project p) {
+          }
 
           @Override
-          public void remove(Project p) {}
+          public void remove(Project p) {
+          }
 
           @Override
-          public void remove(Project.NameKey name) {}
+          public void remove(Project.NameKey name) {
+          }
 
           @Override
           public ImmutableSortedSet<Project.NameKey> all() {
@@ -264,7 +269,8 @@ public class RefControlTest {
           }
 
           @Override
-          public void onCreateProject(Project.NameKey newProjectName) {}
+          public void onCreateProject(Project.NameKey newProjectName) {
+          }
 
           @Override
           public Set<AccountGroup.UUID> guessRelevantGroupUUIDs() {
@@ -277,7 +283,8 @@ public class RefControlTest {
           }
 
           @Override
-          public void evict(Project.NameKey p) {}
+          public void evict(Project.NameKey p) {
+          }
 
           @Override
           public ProjectState checkedGet(Project.NameKey projectName, boolean strict)
@@ -1086,7 +1093,8 @@ public class RefControlTest {
   }
 
   private static class MockUser extends CurrentUser {
-    @Nullable private final String username;
+    @Nullable
+    private final String username;
     private final GroupMembership groups;
 
     MockUser(@Nullable String name, AccountGroup.UUID[] groupId) {
