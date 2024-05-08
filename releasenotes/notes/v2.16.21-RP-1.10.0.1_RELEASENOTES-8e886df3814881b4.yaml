@@ -1,0 +1,3 @@
+---
+fixes:
+  - Content Delivery cleaned up of stale files in rare circumstances

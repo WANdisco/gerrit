@@ -1,0 +1,3 @@
+---
+features:
+  - Disable Replication - This new functionality lets you start Gerrit MultiSite in a non-replicated environment. See Disable Replication

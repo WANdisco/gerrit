@@ -1,0 +1,3 @@
+---
+fixes:
+  - Small Paxos proposals no longer require Content Delivery

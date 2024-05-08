@@ -1441,7 +1441,7 @@ public class RestApiServlet extends HttpServlet {
     checkArgument(statusCode >= 400, "non-error status: %s", statusCode);
     res.setStatus(statusCode);
     logger.atFinest().withCause(err).log("REST call failed: %d", statusCode);
-    return replyText(req, res, true, msg);
+    return replyText(req, res, true, msg, err);
   }
 
   /**
@@ -1452,18 +1452,39 @@ public class RestApiServlet extends HttpServlet {
    * @param allowTracing whether it is allowed to log the reply if tracing is enabled, must not be
    *     set to {@code true} if the reply may contain sensitive data
    * @param text the text reply
+   * @param err the error that may have occurred
    * @return the length of the response
    * @throws IOException
    */
   static long replyText(
-      @Nullable HttpServletRequest req, HttpServletResponse res, boolean allowTracing, String text)
+      @Nullable HttpServletRequest req, HttpServletResponse res, boolean allowTracing, String text, Throwable err)
       throws IOException {
     if ((req == null || isRead(req)) && isMaybeHTML(text)) {
       return replyJson(
           req, res, allowTracing, ImmutableListMultimap.of("pp", "0"), new JsonPrimitive(text));
     }
+
+    // Sometimes the err can contain much more useful information but it
+    // can also be the same as text message but with class info as a prefix
+    // only report the error if it is different.
+    boolean duplicate = false;
+    String errorMessage = err.getMessage();
+
+    if (!Strings.isNullOrEmpty(errorMessage) && errorMessage.endsWith(text)){
+      duplicate = true;
+    }
+
     if (!text.endsWith("\n")) {
       text += "\n";
+    }
+
+    if (!Strings.isNullOrEmpty(errorMessage) && !duplicate){
+      // report any additional errors
+      text += String.format("Error details : %s\n", errorMessage);
+
+      if (err.getCause() != null && !Strings.isNullOrEmpty(err.getCause().getMessage())){
+        text += String.format("Cause : %s\n", err.getCause().getMessage());
+      }
     }
     if (allowTracing) {
       logger.atFinest().log("Text response body:\n%s", text);

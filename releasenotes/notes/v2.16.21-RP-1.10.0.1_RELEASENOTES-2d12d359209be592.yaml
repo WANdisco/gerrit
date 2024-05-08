@@ -1,0 +1,3 @@
+---
+fixes:
+  - Account Inactivation State now properly replicated

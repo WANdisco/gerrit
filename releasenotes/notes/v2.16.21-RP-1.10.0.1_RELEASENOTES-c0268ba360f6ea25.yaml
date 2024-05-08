@@ -1,0 +1,3 @@
+---
+fixes:
+  - GerritMS/GitMS 1.10.0 fully support Git Atomic Commits

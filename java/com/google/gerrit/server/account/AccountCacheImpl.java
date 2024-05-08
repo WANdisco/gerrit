@@ -29,12 +29,15 @@ import com.google.gerrit.server.cache.CacheModule;
 import com.google.gerrit.server.config.AllUsersName;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
+import com.google.gerrit.server.replication.ReplicatedCacheManager;
+import com.google.gerrit.server.replication.Replicator;
 import com.google.gerrit.server.util.time.TimeUtil;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Singleton;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Named;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,9 +49,12 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+
 import org.eclipse.jgit.errors.ConfigInvalidException;
 
-/** Caches important (but small) account state to avoid database hits. */
+/**
+ * Caches important (but small) account state to avoid database hits.
+ */
 @Singleton
 public class AccountCacheImpl implements AccountCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -59,7 +65,8 @@ public class AccountCacheImpl implements AccountCache {
     return new CacheModule() {
       @Override
       protected void configure() {
-        cache(BYID_NAME, Account.Id.class, new TypeLiteral<Optional<AccountState>>() {})
+        cache(BYID_NAME, Account.Id.class, new TypeLiteral<Optional<AccountState>>() {
+        })
             .loader(ByIdLoader.class);
 
         bind(AccountCacheImpl.class);
@@ -83,6 +90,18 @@ public class AccountCacheImpl implements AccountCache {
     this.externalIds = externalIds;
     this.byId = byId;
     this.executor = executor;
+
+    attachToReplication();
+  }
+  /**
+   * Attach to replication the caches that this object uses.
+   * N.B. we do not need to hook in the cache listeners if replication is disabled.
+   */
+  final void attachToReplication() {
+    if(Replicator.isReplicationDisabled()){
+      return;
+    }
+    ReplicatedCacheManager.watchCache(BYID_NAME, this.byId);
   }
 
   @Override
@@ -158,12 +177,29 @@ public class AccountCacheImpl implements AccountCache {
     if (accountId != null) {
       logger.atFine().log("Evict account %d", accountId.get());
       byId.invalidate(accountId);
+      ReplicatedCacheManager.replicateEvictionFromCache(BYID_NAME, accountId);
+    }
+  }
+
+  @Override
+  public void evict(@Nullable Account.Id accountId, boolean shouldReplicate) {
+    if (accountId != null) {
+      logger.atFine().log("Evict account %d", accountId.get());
+      byId.invalidate(accountId);
+      if (shouldReplicate) {
+        ReplicatedCacheManager.replicateEvictionFromCache(BYID_NAME, accountId);
+      }
     }
   }
 
   @Override
   public void evictAll() {
     logger.atFine().log("Evict all accounts");
+
+    if (Replicator.isReplicationEnabled()) {
+        ReplicatedCacheManager.replicateEvictionFromCache(BYID_NAME, ReplicatedCacheManager.evictAllWildCard);
+    }
+
     byId.invalidateAll();
   }
 

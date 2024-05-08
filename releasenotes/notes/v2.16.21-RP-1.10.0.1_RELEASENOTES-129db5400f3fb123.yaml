@@ -1,0 +1,3 @@
+---
+fixes:
+  - Persisted events are now cleaned up

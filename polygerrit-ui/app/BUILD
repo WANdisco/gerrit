@@ -134,6 +134,7 @@ DIRECTORIES = [
         # Should not run sandboxed.
         "local",
         "template",
+        "disabled"
     ],
 ) for directory in DIRECTORIES]
 

@@ -2,7 +2,7 @@ workspace(name = "gerrit")
 
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
-load("//tools/bzl:maven_jar.bzl", "GERRIT", "MAVEN_LOCAL", "maven_jar")
+load("//tools/bzl:maven_jar.bzl", "GERRIT", "MAVEN_LOCAL", "WANDISCO_ASSETS", "maven_jar")
 load("//plugins:external_plugin_deps.bzl", "external_plugin_deps")
 load("//tools:nongoogle.bzl", "declare_nongoogle_deps")
 
@@ -245,9 +245,9 @@ maven_jar(
 )
 
 maven_jar(
-    name = "flogger-log4j-backend",
-    artifact = "com.google.flogger:flogger-log4j-backend:" + FLOGGER_VERS,
-    sha1 = "17aa5e31daa1354187e14b6978597d630391c028",
+    name = "flogger-slf4j-backend",
+    artifact = "com.google.flogger:flogger-slf4j-backend:" + FLOGGER_VERS,
+    sha1 = "0d211cf0e54bf05bda275c897bb3721614410efc",
 )
 
 maven_jar(
@@ -348,6 +348,12 @@ maven_jar(
     name = "jcl-over-slf4j",
     artifact = "org.slf4j:jcl-over-slf4j:" + SLF4J_VERS,
     sha1 = "33fbc2d93de829fa5e263c5ce97f5eab8f57d53e",
+)
+
+maven_jar(
+    name = "jul-to-slf4j",
+    artifact = "org.slf4j:jul-to-slf4j:" + SLF4J_VERS,
+    sha1 = "8031352b2bb0a49e67818bf04c027aa92e645d5c",
 )
 
 maven_jar(
@@ -815,6 +821,39 @@ maven_jar(
     sha1 = "fd369423346b2f1525c413e33f8cf95b09c92cbd",
 )
 
+#MOCKITO
+
+maven_jar(
+    name = "mockito",
+    artifact = "org.mockito:mockito-core:2.28.2",
+    sha1 = "91110215a8cb9b77a46e045ee758f77d79167cc0",
+    deps = [
+        "@byte-buddy-agent//jar",
+        "@byte-buddy//jar",
+        "@objenesis-2//jar",
+    ],
+)
+
+BYTE_BUDDY_VERSION = "1.9.10"
+
+maven_jar(
+    name = "byte-buddy",
+    artifact = "net.bytebuddy:byte-buddy:" + BYTE_BUDDY_VERSION,
+    sha1 = "211a2b4d3df1eeef2a6cacf78d74a1f725e7a840",
+)
+
+maven_jar(
+    name = "byte-buddy-agent",
+    artifact = "net.bytebuddy:byte-buddy-agent:" + BYTE_BUDDY_VERSION,
+    sha1 = "9674aba5ee793e54b864952b001166848da0f26b",
+)
+
+maven_jar(
+    name = "objenesis-2",
+    artifact = "org.objenesis:objenesis:2.6",
+    sha1 = "639033469776fd37c08358c6b92a4761feb2af4b",
+)
+
 # Note that all of the following org.apache.httpcomponents have newer versions,
 # but 4.4.1 is the only version that is available for all of them.
 # TODO: Check what combination of new versions are compatible.
@@ -987,8 +1026,8 @@ maven_jar(
 
 maven_jar(
     name = "commons-io",
-    artifact = "commons-io:commons-io:2.2",
-    sha1 = "83b5b8a7ba1c08f9e8c8ff2373724e33d3c1e22a",
+    artifact = "commons-io:commons-io:2.6",
+    sha1 = "815893df5f31da2ece4040fe0a12fd44b577afaf",
 )
 
 maven_jar(
@@ -997,10 +1036,41 @@ maven_jar(
     sha1 = "8e8c1d8fc6144405700dd8df3b177f2801ac5987",
 )
 
+
+
+maven_jar(
+    name = "jackson-core",
+    artifact = "com.fasterxml.jackson.core:jackson-core:2.11.2",
+    sha1 = "bc022ab0f0c83c07f9c52c5ab9a6a4932b15cc35",
+)
+
+#jackson-databind contains all appropriate classes we require in gerrit-gitms-interface
+#such as ObjectMapper, JsonNode etc
+maven_jar(
+    name = "jackson-databind",
+    artifact = "com.fasterxml.jackson.core:jackson-databind:2.11.2",
+)
+#This is required by jackson databind ObjectMapper
+maven_jar(
+    name = "jackson-annotations",
+    artifact = "com.fasterxml.jackson.core:jackson-annotations:2.11.2",
+)
+
+
 maven_jar(
     name = "javax-activation",
     artifact = "javax.activation:activation:1.1.1",
     sha1 = "485de3a253e23f645037828c07f1d7f1af40763a",
+)
+
+# WANdisco maven assets
+_GERRIT_GITMS_VERSION = "1.1.0.1"
+
+maven_jar(
+    name = "gerrit-gitms-interface",
+    artifact = "com.wandisco:gerrit-gitms-interface:" + _GERRIT_GITMS_VERSION,
+    repository = WANDISCO_ASSETS,
+    sha1 = "a0eb0feb042c06fa0974b45039a728c4c28cb3fd",
 )
 
 load("//tools/bzl:js.bzl", "bower_archive", "npm_binary")

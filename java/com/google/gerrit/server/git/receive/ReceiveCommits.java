@@ -139,6 +139,7 @@ import com.google.gerrit.server.project.ProjectConfig;
 import com.google.gerrit.server.project.ProjectState;
 import com.google.gerrit.server.query.change.ChangeData;
 import com.google.gerrit.server.query.change.InternalChangeQuery;
+import com.google.gerrit.server.replication.Replicator;
 import com.google.gerrit.server.submit.MergeOp;
 import com.google.gerrit.server.submit.MergeOpRepoManager;
 import com.google.gerrit.server.submit.SubmoduleException;
@@ -166,6 +167,7 @@ import com.google.inject.util.Providers;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.ConnectException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -184,6 +186,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.stream.Stream;
+
+import com.wandisco.gerrit.gitms.shared.api.exceptions.GitUpdateException;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.eclipse.jgit.errors.ConfigInvalidException;
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
 import org.eclipse.jgit.errors.MissingObjectException;
@@ -227,6 +232,7 @@ class ReceiveCommits {
   private static final String CANNOT_DELETE_CONFIG =
       "Cannot delete project configuration from '" + RefNames.REFS_CONFIG + "'";
   private static final String INTERNAL_SERVER_ERROR = "internal server error";
+  private static final String GITMS_DOWN_ERROR = "GitMS is down or unreachable";
 
   interface Factory {
     ReceiveCommits create(
@@ -280,8 +286,10 @@ class ReceiveCommits {
         } else if ((input instanceof ExecutionException)
             && (input.getCause() instanceof RestApiException)) {
           return (RestApiException) input.getCause();
+        } else if (input instanceof UpdateException){
+          return new RestApiException(ExceptionUtils.getRootCause(input).getMessage(), input);
         }
-        return new RestApiException("Error inserting change/patchset", input);
+        return new RestApiException("Error inserting change/patchset", ExceptionUtils.getRootCause(input));
       };
 
   // ReceiveCommits has a lot of fields, sorry. Here and in the constructor they are split up
@@ -516,6 +524,10 @@ class ReceiveCommits {
     // successfully.
     sendErrorMessages();
 
+    // This sends the final success message (i.e. 'GitMS - update replicated.' if replication is enabled.)
+    // after the 'done' string of the progress monitor is sent.
+    checkAndSendOkMessage(commands);
+
     commandProgress.end();
     progress.end();
   }
@@ -596,26 +608,86 @@ class ReceiveCommits {
       Task replaceProgress = progress.beginSubTask("updated", UNKNOWN);
 
       List<CreateRequest> newChanges = Collections.emptyList();
-      if (magicBranch != null && magicBranch.cmd.getResult() == NOT_ATTEMPTED) {
-        newChanges = selectNewAndReplacedChangesFromMagicBranch(newProgress);
+      String failureReason = "";
+      try {
+        if (magicBranch != null && magicBranch.cmd.getResult() == NOT_ATTEMPTED) {
+            newChanges = selectNewAndReplacedChangesFromMagicBranch(newProgress);
+        }
+        // Commit validation has already happened, so any changes without Change-Id are for the
+        // deprecated feature.
+        warnAboutMissingChangeId(newChanges);
+        preparePatchSetsForReplace(newChanges);
+        insertChangesAndPatchSets(newChanges, replaceProgress);
+      } catch (ResourceConflictException e) {
+          addError(e.getMessage());
+          failureReason = "conflict";
+      } catch (BadRequestException | UnprocessableEntityException e) {
+        logger.atFine().withCause(e).log("Rejecting due to client error");
+        failureReason = e.getMessage();
+      } catch (RestApiException | IOException e) {
+        logger.atSevere().withCause(e).log("Can't insert change/patch set for %s", project.getName());
+        failureReason = String.format("%s: %s",
+            ExceptionUtils.getRootCause(e) instanceof ConnectException ? GITMS_DOWN_ERROR : INTERNAL_SERVER_ERROR,
+            e.getMessage());
+      } finally {
+        if (!Strings.isNullOrEmpty(failureReason)) {
+          rejectRemaining(commands, failureReason);
+        }
+        newProgress.end();
+        replaceProgress.end();
       }
-
-      // Commit validation has already happened, so any changes without Change-Id are for the
-      // deprecated feature.
-      warnAboutMissingChangeId(newChanges);
-      preparePatchSetsForReplace(newChanges);
-      insertChangesAndPatchSets(newChanges, replaceProgress);
-      newProgress.end();
-      replaceProgress.end();
-      queueSuccessMessages(newChanges);
+      // check result of command before printing success to the client
+      if ((magicBranch != null && magicBranch.cmd.getResult().equals(OK)) ||
+          (!directPatchSetPushCommands.isEmpty() && verifyCommandsOk(directPatchSetPushCommands))) {
+        queueSuccessMessages(newChanges);
+      }
       refsPublishDeprecationWarning();
     }
+  }
+
+  private boolean verifyCommandsOk(Collection<ReceiveCommand> commands) {
+     return commands.stream().allMatch(cmd -> cmd.getResult().equals(OK));
   }
 
   private void refsPublishDeprecationWarning() {
     // TODO(xchangcheng): remove after migrating tools which are using this magic branch.
     if (magicBranch != null && magicBranch.publish) {
       addMessage("Pushing to refs/publish/* is deprecated, use refs/for/* instead.");
+    }
+  }
+
+  /**
+   * GitMS specific success messaging - if replication is disabled this should not be printed.
+   * @param commands
+   */
+  private void checkAndSendOkMessage(Collection<ReceiveCommand> commands) {
+    final String okMessage = Replicator.isReplicationDisabled() ? "Update successful" : "GitMS - update replicated.";
+
+    if (verifyCommandsOk(commands)) {
+      logger.atFine().log("Handling success - no errors.");
+      // We're using addMessage here to delay writing the success message until after the progress monitor is
+      // finished using the stream to display the text spinner. If we use sendMessage directly we risk corrupting the
+      // text in the stream when it's expected to only contain progress lines.
+      addMessage(okMessage);
+    }
+  }
+
+  /**
+   * Send the reason for the failure to perform an atomic batch update. No point attaching this to every
+   * rejected update. Only need to do this if some remaining commands are still to be rejected (i.e. result == not_attempted).
+   * GitMS specific success messaging - if replication is disabled this should not be printed.
+   * @param commands
+   * @param message
+   */
+  private void checkAndLogException(final Collection<ReceiveCommand> commands, final String message) {
+    if (!Replicator.isReplicationDisabled()) {
+      if (commands.stream().anyMatch(c -> c.getResult() == NOT_ATTEMPTED)) {
+        logger.atFine().log("Handling failure to replicate: %s.", message);
+        // We're using addMessage here to delay writing the atomic replication error until after the progress monitor is
+        // finished using the stream to display the text spinner. If we use sendMessage directly we risk corrupting the
+        // text in the stream when it's expected to only contain progress lines.
+        addMessage("error: " + message);
+      }
     }
   }
 
@@ -655,7 +727,13 @@ class ReceiveCommits {
       logger.atFine().log("Added %d additional ref updates", added);
       bu.execute();
     } catch (UpdateException | RestApiException e) {
-      rejectRemaining(cmds, INTERNAL_SERVER_ERROR);
+      // Output the root cause to the client console once for this batch. (In the case of a single or non-atomic
+      // update the cause will already be included in the reject message of that command. sendReplicationErrorMessage will
+      // only print if there are remaining commands to reject.)
+      final Throwable rootCause = ExceptionUtils.getRootCause(e);
+      checkAndLogException(cmds, rootCause.getMessage());
+
+      rejectRemaining(cmds, rootCause instanceof ConnectException ? GITMS_DOWN_ERROR :INTERNAL_SERVER_ERROR);
       logger.atSevere().withCause(e).log("update failed:");
     }
 
@@ -771,7 +849,8 @@ class ReceiveCommits {
     }
   }
 
-  private void insertChangesAndPatchSets(List<CreateRequest> newChanges, Task replaceProgress) {
+  private void insertChangesAndPatchSets(List<CreateRequest> newChanges, Task replaceProgress)
+      throws RestApiException, IOException {
     ReceiveCommand magicBranchCmd = magicBranch != null ? magicBranch.cmd : null;
     if (magicBranchCmd != null && magicBranchCmd.getResult() != NOT_ATTEMPTED) {
       logger.atWarning().log(
@@ -831,15 +910,6 @@ class ReceiveCommits {
         }
       }
 
-    } catch (ResourceConflictException e) {
-      addError(e.getMessage());
-      reject(magicBranchCmd, "conflict");
-    } catch (BadRequestException | UnprocessableEntityException e) {
-      logger.atFine().withCause(e).log("Rejecting due to client error");
-      reject(magicBranchCmd, e.getMessage());
-    } catch (RestApiException | IOException e) {
-      logger.atSevere().withCause(e).log("Can't insert change/patch set for %s", project.getName());
-      reject(magicBranchCmd, String.format("%s: %s", INTERNAL_SERVER_ERROR, e.getMessage()));
     }
 
     if (magicBranch != null && magicBranch.submit) {
@@ -2222,7 +2292,15 @@ class ReceiveCommits {
       logger.atFine().log("Finished updating groups from GroupCollector");
     } catch (OrmException e) {
       logger.atSevere().withCause(e).log("Error collecting groups for changes");
-      reject(magicBranch.cmd, INTERNAL_SERVER_ERROR);
+      Throwable cause = ExceptionUtils.getRootCause(e);
+      if (cause instanceof  ConnectException){
+        reject(magicBranch.cmd, GITMS_DOWN_ERROR );
+      } else if( cause instanceof GitUpdateException){
+        reject(magicBranch.cmd, cause.getMessage());
+      } else{
+        reject(magicBranch.cmd, INTERNAL_SERVER_ERROR);
+      }
+      return Collections.emptyList();
     }
     return newChanges;
   }

@@ -1,0 +1,3 @@
+---
+fixes:
+  - Permissions of files created during installation now properly adhere to specified umask

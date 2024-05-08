@@ -1,0 +1,3 @@
+---
+fixes:
+  - Gerrit UI and Gerrit Logs now agree on specific failure issues

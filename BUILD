@@ -17,6 +17,9 @@ config_setting(
     },
 )
 
+# Note version information is obtained from the last Annotated release tag on this branch, plus X commits and
+# last commit sha. e.g  v2.16.11-RP-1.10.0.1-DEV-4-ge78a246aac  When it isn't dirty it will simply show the release tag
+# itself.  v2.16.11-RP-1.10.0.1
 genrule(
     name = "gen_version",
     outs = ["version.txt"],
@@ -72,6 +75,8 @@ API_DEPS = [
     "//gerrit-plugin-gwtui:gwtui-api_deploy.jar",
     "//gerrit-plugin-gwtui:gwtui-api-source_deploy.jar",
     "//gerrit-plugin-gwtui:gwtui-api-javadoc",
+    "//gerrit-console-api:console-api_deploy.jar",
+    "//gerrit-console-api:libgerrit-console-api-module-src.jar",
 ]
 
 genrule2(

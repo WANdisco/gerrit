@@ -1,0 +1,3 @@
+---
+fixes:
+  - Only Java 8 supported in this release (OpenJDK, Oracle)
