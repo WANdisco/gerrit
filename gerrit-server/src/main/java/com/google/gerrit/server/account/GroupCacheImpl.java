@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +30,7 @@ package com.google.gerrit.server.account;
 import com.google.common.base.Optional;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.gerrit.common.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.reviewdb.client.AccountGroup;
 import com.google.gerrit.reviewdb.client.AccountGroupName;
 import com.google.gerrit.reviewdb.server.ReviewDb;
@@ -76,19 +90,73 @@ public class GroupCacheImpl implements GroupCache {
   private final LoadingCache<String, Optional<AccountGroup>> byName;
   private final LoadingCache<String, Optional<AccountGroup>> byUUID;
   private final SchemaFactory<ReviewDb> schema;
+  private final ReplicatedEventsCoordinator replicatedEventsCoordinator;
 
   @Inject
   GroupCacheImpl(
       @Named(BYID_NAME) LoadingCache<AccountGroup.Id, Optional<AccountGroup>> byId,
       @Named(BYNAME_NAME) LoadingCache<String, Optional<AccountGroup>> byName,
       @Named(BYUUID_NAME) LoadingCache<String, Optional<AccountGroup>> byUUID,
-      SchemaFactory<ReviewDb> schema) {
+      SchemaFactory<ReviewDb> schema,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.byId = byId;
     this.byName = byName;
     this.byUUID = byUUID;
     this.schema = schema;
+    this.replicatedEventsCoordinator = replicatedEventsCoordinator;
+    attachToReplication();
   }
 
+  final void attachToReplication() {
+    if( !replicatedEventsCoordinator.isGerritIndexerRunning() ){
+      log.info("Replication is disabled - not hooking in GroupCache listeners.");
+      return;
+    }
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(BYID_NAME, this.byId);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(BYNAME_NAME, this.byName);
+    replicatedEventsCoordinator.getReplicatedIncomingCacheEventProcessor().watchCache(BYUUID_NAME, this.byUUID);
+  }
+
+  /**
+   *  Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   *  replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value to evict from the cache.
+   */
+  private void replicateEvictionFromCache(final String name, final AccountGroup.NameKey value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      // The AccountGroup.NameKey field, is invalidated using the string of the namekey - we need to replicate
+      // the same value here.
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value.get());
+    }
+  }
+
+  /**
+   *  Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   *  replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value to evict from the cache.
+   */
+  private void replicateEvictionFromCache(final String name, final AccountGroup.UUID value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      // The AccountGroup.UUID field, is invalidated using the string of the UUID - we need to replicate
+      // the same value here.
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value.get());
+    }
+  }
+  /**
+   *  Asks the replicated coordinator for the instance of the ReplicatedOutgoingCacheEventsFeed and calls
+   *  replicateEvictionFromCache on it.
+   * @param name : Name of the cache to evict from.
+   * @param value : Value to evict from the cache.
+   */
+  private void replicateEvictionFromCache(final String name, final AccountGroup.Id value) {
+    if(replicatedEventsCoordinator.isGerritIndexerRunning()) {
+      // The AccountGroup.Id field, is invalidated using the actual AccountGroup.Id object, to supply it raw to
+      // replication so we use the exact same key value.
+      replicatedEventsCoordinator.getReplicatedOutgoingCacheEventsFeed().replicateEvictionFromCache(name, value);
+    }
+  }
   @Override
   public AccountGroup get(final AccountGroup.Id groupId) {
     try {
@@ -104,23 +172,30 @@ public class GroupCacheImpl implements GroupCache {
   public void evict(final AccountGroup group) {
     if (group.getId() != null) {
       byId.invalidate(group.getId());
+      replicateEvictionFromCache(BYID_NAME, group.getId());
     }
     if (group.getNameKey() != null) {
       byName.invalidate(group.getNameKey().get());
+      replicateEvictionFromCache(BYNAME_NAME, group.getNameKey());
     }
     if (group.getGroupUUID() != null) {
       byUUID.invalidate(group.getGroupUUID().get());
+      replicateEvictionFromCache(BYUUID_NAME, group.getGroupUUID());
     }
   }
+
 
   @Override
   public void evictAfterRename(final AccountGroup.NameKey oldName,
       final AccountGroup.NameKey newName) {
     if (oldName != null) {
       byName.invalidate(oldName.get());
+      replicateEvictionFromCache(BYNAME_NAME, oldName);
     }
     if (newName != null) {
       byName.invalidate(newName.get());
+      replicateEvictionFromCache(BYNAME_NAME, newName);
+
     }
   }
 
@@ -163,6 +238,7 @@ public class GroupCacheImpl implements GroupCache {
   @Override
   public void onCreateGroup(AccountGroup.NameKey newGroupName) {
     byName.invalidate(newGroupName.get());
+    replicateEvictionFromCache(BYNAME_NAME, newGroupName);
   }
 
   private static AccountGroup missing(AccountGroup.Id key) {

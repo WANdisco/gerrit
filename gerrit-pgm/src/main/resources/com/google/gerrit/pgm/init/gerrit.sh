@@ -92,6 +92,23 @@ get_config() {
   fi
 }
 
+#Required to determine the version of the
+#gerrit.war file before attempting to start it
+check_is_replicated_war() {
+  version=$(check_war_version $1)
+  case "$version" in
+  *RP*) return 0;;
+  esac
+
+  return 1;
+}
+
+#Return the war version.
+check_war_version() {
+  version=$($JAVA -jar $1 version)
+  echo $version
+}
+
 ##################################################
 # Get the action and options
 ##################################################
@@ -301,7 +318,8 @@ ulimit -c 0            ; # core file size
 ulimit -d unlimited    ; # data seg size
 ulimit -f unlimited    ; # file size
 ulimit -m >/dev/null 2>&1 && ulimit -m unlimited  ; # max memory size
-ulimit -n $GERRIT_FDS  ; # open files
+#GER-1848: Removing gerrit setting of its own FD limit to follow session's limits instead.
+#ulimit -n $GERRIT_FDS  ; # open files
 ulimit -t unlimited    ; # cpu time
 ulimit -v unlimited    ; # virtual memory
 
@@ -370,6 +388,11 @@ fi
 ##################################################
 case "$ACTION" in
   start)
+    if ! check_is_replicated_war $GERRIT_WAR; then
+        echo "** ERROR: $GERRIT_WAR version [ $(check_war_version $GERRIT_WAR ) ] doesn't contain RP. It is not a WANdisco replicated version."
+        exit 1
+    fi
+
     printf '%s' "Starting Gerrit Code Review: "
 
     if test 1 = "$NO_START" ; then

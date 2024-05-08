@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+
 // Copyright (C) 2015 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +43,9 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.gerrit.common.BatchUpdateLockManager;
 import com.google.gerrit.common.Nullable;
+import com.google.gerrit.common.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
 import com.google.gerrit.extensions.restapi.ResourceNotFoundException;
 import com.google.gerrit.extensions.restapi.RestApiException;
@@ -506,6 +521,7 @@ public class BatchUpdate implements AutoCloseable {
   private Order order;
   private boolean updateChangesInParallel;
   private RequestId requestId;
+  private ReplicatedEventsCoordinator eventsCoordinator;
 
   @AssistedInject
   BatchUpdate(
@@ -525,7 +541,8 @@ public class BatchUpdate implements AutoCloseable {
       @Assisted ReviewDb db,
       @Assisted Project.NameKey project,
       @Assisted CurrentUser user,
-      @Assisted Timestamp when) {
+      @Assisted Timestamp when,
+      ReplicatedEventsCoordinator eventsCoordinator) {
     this.allUsers = allUsers;
     this.changeControlFactory = changeControlFactory;
     this.changeNotesFactory = changeNotesFactory;
@@ -537,6 +554,7 @@ public class BatchUpdate implements AutoCloseable {
     this.repoManager = repoManager;
     this.schemaFactory = schemaFactory;
     this.updateManagerFactory = updateManagerFactory;
+    this.eventsCoordinator = eventsCoordinator;
 
     this.logThresholdNanos = MILLISECONDS.toNanos(
         ConfigUtil.getTimeUnit(
@@ -548,6 +566,13 @@ public class BatchUpdate implements AutoCloseable {
     this.when = when;
     tz = serverIdent.getTimeZone();
     order = Order.REPO_BEFORE_DB;
+  }
+
+  public void queueReplicationIndexDeletionEvent(int changeId, String projectName) throws IOException {
+    if (eventsCoordinator.isGerritIndexerRunning()) {
+      eventsCoordinator.getReplicatedOutgoingIndexEventsFeed()
+          .queueReplicationIndexDeletionEvent(changeId, projectName);
+    }
   }
 
   @Override
@@ -915,6 +940,7 @@ public class BatchUpdate implements AutoCloseable {
       @SuppressWarnings("resource") // Not always opened.
       NoteDbUpdateManager updateManager = null;
       try {
+        BatchUpdateLockManager.getInstance().obtainLock(id.get());
         ChangeContext ctx;
         db.changes().beginTransaction(id);
         try {
@@ -952,6 +978,14 @@ public class BatchUpdate implements AutoCloseable {
             db.changes().update(cs);
           }
           db.commit();
+
+          if (deleted){
+            String change = id.toString();
+            int changeId = Integer.parseInt(change);
+            String projectName = project.toString();
+            queueReplicationIndexDeletionEvent(changeId, projectName);
+          }
+
         } finally {
           db.rollback();
         }
@@ -982,6 +1016,7 @@ public class BatchUpdate implements AutoCloseable {
         if (updateManager != null) {
           updateManager.close();
         }
+        BatchUpdateLockManager.getInstance().releaseLock(id.get());
       }
     }
 

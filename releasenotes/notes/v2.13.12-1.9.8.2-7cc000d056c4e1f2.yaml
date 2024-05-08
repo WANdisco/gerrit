@@ -1,0 +1,9 @@
+---
+features:
+  - Optimize Replicated Gerrit Events handling. See https://docs.wandisco.com/gerrit/1.9/#incoming-event-handling
+  - Invalid Gerrit events are now placed in a failed directory.
+  - Support replicated events for "adv_bases".
+  
+fixes:
+  - Fix non-POSIX coding in "gerrit.sh" so will work on all Linux distros WANdisco supports.
+  - Eliminate “ulimit -n” command from “gerrit.sh” startup script that caused unnecessary failure in replicated environment.
