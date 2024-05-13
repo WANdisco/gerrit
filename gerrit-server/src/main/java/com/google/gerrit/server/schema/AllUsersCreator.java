@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2014 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +35,7 @@ import com.google.gerrit.common.data.AccessSection;
 import com.google.gerrit.common.data.GroupReference;
 import com.google.gerrit.common.data.LabelType;
 import com.google.gerrit.common.data.Permission;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.reviewdb.client.RefNames;
 import com.google.gerrit.server.GerritPersonIdent;
@@ -72,7 +86,7 @@ public class AllUsersCreator {
     } catch (RepositoryNotFoundException notFound) {
       try (Repository git = mgr.createRepository(allUsersName)) {
         initAllUsers(git);
-      } catch (RepositoryNotFoundException err) {
+      } catch (RepositoryNotFoundException | PreconditionFailedException err) {
         String name = allUsersName.get();
         throw new IOException("Cannot create repository " + name, err);
       }

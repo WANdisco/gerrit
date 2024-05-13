@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2011 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +30,7 @@ package com.google.gerrit.server.project;
 import com.google.auto.value.AutoValue;
 import com.google.common.cache.Cache;
 import com.google.common.collect.ImmutableList;
+import com.google.gerrit.common.ReplicatedCacheManager;
 import com.google.gerrit.common.data.AccessSection;
 import com.google.gerrit.server.cache.CacheModule;
 import com.google.gerrit.server.util.MostSpecificComparator;
@@ -56,6 +70,11 @@ public class SectionSortCache {
   @Inject
   SectionSortCache(@Named(CACHE_NAME) Cache<EntryKey, EntryVal> cache) {
     this.cache = cache;
+    attachToReplication();
+  }
+
+  final void attachToReplication() {
+    ReplicatedCacheManager.watchCache(CACHE_NAME, this.cache);
   }
 
   void sort(String ref, List<AccessSection> sections) {

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,8 +123,23 @@ public class AccountManager {
         AccountExternalId.Key key = id(who);
         AccountExternalId id = getAccountExternalId(db, key);
         if (id == null) {
+          if (who.getUserName() != null) {
+            key = new AccountExternalId.Key(AccountExternalId.SCHEME_USERNAME, who.getUserName());
+            AccountExternalId existingId = getAccountExternalId(db, key);
+
+            if (existingId != null) {
+              // An inconsistency is detected in the database, having a record for scheme "username:"
+              // but no record for scheme "gerrit:". Try to recover by linking
+              // "gerrit:" identity to the existing account.
+              log.warn(
+                  "User {} already has an account; link new identity to the existing account.",
+                  who.getUserName());
+              return link(existingId.getAccountId(), who);
+            }
+          }
           // New account, automatically create and return.
           //
+          log.info("Account External ID not found. Attempting to create new account.");
           return create(db, who);
         }
 
@@ -354,14 +382,17 @@ public class AccountManager {
   public AuthResult link(Account.Id to, AuthRequest who)
       throws AccountException, OrmException, IOException {
     try (ReviewDb db = schema.open()) {
+      log.info("Link another authentication identity to an existing account");
       AccountExternalId.Key key = id(who);
       AccountExternalId extId = getAccountExternalId(db, key);
       if (extId != null) {
         if (!extId.getAccountId().equals(to)) {
           throw new AccountException("Identity in use by another account");
         }
+        log.info("Updating existing external ID data");
         update(db, who, extId);
       } else {
+        log.info("Linking new external ID to the existing account");
         extId = createId(to, who);
         extId.setEmailAddress(who.getEmailAddress());
         db.accountExternalIds().insert(Collections.singleton(extId));
