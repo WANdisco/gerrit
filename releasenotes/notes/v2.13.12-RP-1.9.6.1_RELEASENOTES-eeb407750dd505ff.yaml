@@ -1,0 +1,3 @@
+---
+fixes:
+  - Critical JGit patch shipped as Gerrit 2.13.12_WDv2 to fix corruption of packfile list due to concurrent access during GC - https://bugs.eclipse.org/bugs/show_bug.cgi?id=544199
