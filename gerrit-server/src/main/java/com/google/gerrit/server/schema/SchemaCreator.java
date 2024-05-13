@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +28,7 @@
 package com.google.gerrit.server.schema;
 
 import com.google.gerrit.common.data.GroupReference;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.reviewdb.client.AccountGroup;
 import com.google.gerrit.reviewdb.client.AccountGroupName;
 import com.google.gerrit.reviewdb.client.CurrentSchemaVersion;
@@ -72,7 +86,7 @@ public class SchemaCreator {
   }
 
   public void create(final ReviewDb db) throws OrmException, IOException,
-      ConfigInvalidException {
+      ConfigInvalidException, PreconditionFailedException {
     final JdbcSchema jdbc = (JdbcSchema) db;
     try (JdbcExecutor e = new JdbcExecutor(jdbc)) {
       jdbc.updateSchema(e);

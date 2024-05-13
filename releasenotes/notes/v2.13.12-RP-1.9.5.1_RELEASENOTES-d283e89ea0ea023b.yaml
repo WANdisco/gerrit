@@ -1,0 +1,3 @@
+---
+fixes:
+  - Critical Security fix shipped as Gerrit 2.13.12 with replication support - https://bugs.chromium.org/p/gerrit/issues/detail?id=10262
