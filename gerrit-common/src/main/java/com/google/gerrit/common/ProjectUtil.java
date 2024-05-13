@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2013 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +28,7 @@
 package com.google.gerrit.common;
 
 public class ProjectUtil {
+
   public static String stripGitSuffix(String name) {
     if (name.endsWith(".git")) {
       // Be nice and drop the trailing ".git" suffix, which we never keep
@@ -27,6 +41,7 @@ public class ProjectUtil {
     }
     return name;
   }
+
 
   private ProjectUtil() {
   }

@@ -1,12 +1,25 @@
+
+#/********************************************************************************
+# * Copyright (c) 2014-2018 WANdisco
+# *
+# * Licensed under the Apache License, Version 2.0 (the "License");
+# * you may not use this file except in compliance with the License.
+# * You may obtain a copy of the License at
+# * http://www.apache.org/licenses/LICENSE-2.0
+# *
+# * Apache License, Version 2.0
+# *
+# ********************************************************************************/
+ 
 include_defs('//lib/maven.defs')
 include_defs('//lib/JGIT_VERSION')
 
 maven_jar(
   name = 'jgit-servlet',
-  id = 'org.eclipse.jgit:org.eclipse.jgit.http.server:' + VERS,
-  sha1 = '04cf57795ffd2a577a20746f9c6a0b0922438dd9',
+  id = 'org.eclipse.jgit:org.eclipse.jgit.http.server:' + VERS_WD,
+  sha1 = 'a51577560c08cf7f276ffc35c7d1930639d66a19',
   license = 'jgit',
-  repository = REPO,
+  repository = REPO_WD,
   deps = ['//lib/jgit/org.eclipse.jgit:jgit'],
   unsign = True,
   exclude = [
