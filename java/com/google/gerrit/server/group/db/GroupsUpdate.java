@@ -442,30 +442,39 @@ public class GroupsUpdate {
     logger.atFine().log("evict caches on creation of group %s", createdGroup.getGroupUUID());
     // By UUID is used for the index and hence should be evicted before refreshing the index.
     groupCache.evict(createdGroup.getGroupUUID());
-    indexer.get().index(createdGroup.getGroupUUID());
-    // These caches use the result from the index and hence must be evicted after refreshing the
-    // index.
-    groupCache.evict(createdGroup.getId());
-    groupCache.evict(createdGroup.getNameKey());
-    createdGroup.getMembers().forEach(groupIncludeCache::evictGroupsWithMember);
-    createdGroup.getSubgroups().forEach(groupIncludeCache::evictParentGroupsOf);
+    try {
+      indexer.get().index(createdGroup.getGroupUUID());
+      // These caches use the result from the index and hence must be evicted after refreshing the
+      // index.
+      groupCache.evict(createdGroup.getId());
+      groupCache.evict(createdGroup.getNameKey());
+      createdGroup.getMembers().forEach(groupIncludeCache::evictGroupsWithMember);
+      createdGroup.getSubgroups().forEach(groupIncludeCache::evictParentGroupsOf);
+    } catch (IOException e) {
+      logger.atWarning().log("Unable to index group '%s': %s", createdGroup.getName(), e.getMessage());
+    }
   }
 
   private void evictCachesOnGroupUpdate(UpdateResult result) {
     logger.atFine().log("evict caches on update of group %s", result.getGroupUuid());
     // By UUID is used for the index and hence should be evicted before refreshing the index.
     groupCache.evict(result.getGroupUuid());
-    indexer.get().index(result.getGroupUuid());
-    // These caches use the result from the index and hence must be evicted after refreshing the
-    // index.
-    groupCache.evict(result.getGroupId());
-    groupCache.evict(result.getGroupName());
-    result.getPreviousGroupName().ifPresent(groupCache::evict);
+    try {
+      indexer.get().index(result.getGroupUuid());
+      // These caches use the result from the index and hence must be evicted after refreshing the
+      // index.
+      groupCache.evict(result.getGroupId());
+      groupCache.evict(result.getGroupName());
+      result.getPreviousGroupName().ifPresent(groupCache::evict);
 
-    result.getAddedMembers().forEach(groupIncludeCache::evictGroupsWithMember);
-    result.getDeletedMembers().forEach(groupIncludeCache::evictGroupsWithMember);
-    result.getAddedSubgroups().forEach(groupIncludeCache::evictParentGroupsOf);
-    result.getDeletedSubgroups().forEach(groupIncludeCache::evictParentGroupsOf);
+      result.getAddedMembers().forEach(groupIncludeCache::evictGroupsWithMember);
+      result.getDeletedMembers().forEach(groupIncludeCache::evictGroupsWithMember);
+      result.getAddedSubgroups().forEach(groupIncludeCache::evictParentGroupsOf);
+      result.getDeletedSubgroups().forEach(groupIncludeCache::evictParentGroupsOf);
+    } catch (IOException e) {
+      logger.atWarning().log("Unable to index updated group '%s': %s", result.getGroupName(), e.getMessage());
+
+    }
   }
 
   private void updateNameInProjectConfigsIfNecessary(UpdateResult result) {

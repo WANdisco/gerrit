@@ -16,6 +16,7 @@ package com.google.gerrit.server.schema;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth8.assertThat;
+import static com.google.gerrit.server.replication.configuration.ReplicationConstants.REPLICATION_DISABLED;
 import static com.google.gerrit.server.schema.NoteDbSchemaUpdater.requiredUpgrades;
 import static com.google.gerrit.testing.GerritJUnit.assertThrows;
 
@@ -24,6 +25,7 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.exceptions.StorageException;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.server.config.AllProjectsName;
 import com.google.gerrit.server.config.AllUsersName;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
@@ -31,10 +33,14 @@ import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.notedb.IntBlob;
 import com.google.gerrit.server.notedb.RepoSequence;
 import com.google.gerrit.server.notedb.Sequences;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import com.google.gerrit.testing.InMemoryRepositoryManager;
 import com.google.gerrit.testing.TestUpdateUI;
 import java.io.IOException;
 import java.util.Optional;
+import java.util.Properties;
+
+import org.eclipse.jgit.errors.ConfigInvalidException;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.junit.TestRepository;
 import org.eclipse.jgit.lib.Config;
@@ -124,7 +130,11 @@ public class NoteDbSchemaUpdaterTest {
         } catch (Exception e) {
           throw new StorageException(e);
         }
-        repoManager.createRepository(allUsersName).close();
+        try {
+          repoManager.createRepository(allUsersName).close();
+        } catch (PreconditionFailedException e) {
+          throw  new IOException(e);
+        }
         setUp();
       }
 
@@ -146,7 +156,20 @@ public class NoteDbSchemaUpdaterTest {
     }
 
     protected void seedGroupSequenceRef() {
+      // Create a Dummy ReplicatedConfig instance to satisfy the constructor of RepoSequence in
+      // the new test.
+      Properties testingProperties = new Properties();
+      testingProperties.put(REPLICATION_DISABLED, true);
+
+      ReplicatedConfiguration dummyReplicationConfig;
+      try {
+        dummyReplicationConfig = new ReplicatedConfiguration(testingProperties);
+      } catch (ConfigInvalidException e) {
+        throw new RuntimeException("Unable to create a dummy replicated config instance: " + e.getMessage(), e);
+      }
+
       new RepoSequence(
+              dummyReplicationConfig,
               repoManager,
               GitReferenceUpdated.DISABLED,
               allUsersName,

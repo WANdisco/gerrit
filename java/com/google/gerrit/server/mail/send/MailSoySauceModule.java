@@ -22,6 +22,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.gerrit.server.CacheRefreshExecutor;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.inject.Inject;
 import com.google.inject.ProvisionException;
 import com.google.inject.Singleton;
@@ -38,6 +39,7 @@ import javax.inject.Provider;
  * cache refreshes automatically, so Gerrit does not need to be restarted if templates are changed.
  */
 public class MailSoySauceModule extends CacheModule {
+  @SkipCacheReplication
   static final String CACHE_NAME = "soy_sauce_compiled_templates";
   private static final String SOY_LOADING_CACHE_KEY = "KEY";
 

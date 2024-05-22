@@ -17,6 +17,7 @@ package com.google.gerrit.server.events;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.entities.Project.NameKey;
 
+@isReplicatedServerEvent
 public class ProjectHeadUpdatedEvent extends ProjectEvent {
 
   static final String TYPE = "project-head-updated";

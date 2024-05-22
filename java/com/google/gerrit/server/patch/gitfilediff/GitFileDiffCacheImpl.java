@@ -35,6 +35,7 @@ import com.google.gerrit.metrics.Counter0;
 import com.google.gerrit.metrics.Description;
 import com.google.gerrit.metrics.MetricMaker;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.config.ConfigUtil;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.git.GitRepositoryManager;
@@ -76,6 +77,8 @@ import org.eclipse.jgit.util.io.DisabledOutputStream;
 /** Implementation of the {@link GitFileDiffCache} */
 @Singleton
 public class GitFileDiffCacheImpl implements GitFileDiffCache {
+
+  @SkipCacheReplication
   private static final String GIT_DIFF = "git_file_diff";
 
   public static Module module() {

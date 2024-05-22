@@ -33,6 +33,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.entities.Account;
 import com.google.gerrit.server.account.externalids.ExternalId;
 import com.google.gerrit.server.account.externalids.ExternalIdKeyFactory;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.config.ConfigUtil;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.inject.Inject;
@@ -48,7 +49,9 @@ import org.eclipse.jgit.lib.Config;
 
 public class WebSessionManager {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
-  public static final String CACHE_NAME = "web_sessions";
+  // WebSessions are created per user, per connection to ensure tenant information is not shared across connections.
+  // We should not replicate this cache due to having a performance impact.
+  @SkipCacheReplication public static final String CACHE_NAME = "web_sessions";
 
   private final long sessionMaxAgeMillis;
   private final SecureRandom prng;

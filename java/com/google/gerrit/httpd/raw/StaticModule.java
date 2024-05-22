@@ -26,6 +26,7 @@ import com.google.gerrit.httpd.XsrfCookieFilter;
 import com.google.gerrit.httpd.raw.ResourceServlet.Resource;
 import com.google.gerrit.launcher.GerritLauncher;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.config.CanonicalWebUrl;
 import com.google.gerrit.server.config.GerritOptions;
 import com.google.gerrit.server.config.GerritServerConfig;
@@ -60,7 +61,8 @@ import org.eclipse.jgit.lib.Config;
 public class StaticModule extends ServletModule {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-  public static final String CACHE = "static_content";
+  @SkipCacheReplication public static final String CACHE = "static_content";
+  public static final String GERRIT_UI_COOKIE = "GERRIT_UI";
 
   /**
    * Paths at which we should serve the main PolyGerrit application {@code index.html}.

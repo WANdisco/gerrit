@@ -14,6 +14,7 @@
 
 package com.google.gerrit.acceptance;
 
+import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.extensions.events.LifecycleListener;
 import com.google.gerrit.index.project.ProjectIndexer;
 import com.google.gerrit.lifecycle.LifecycleModule;
@@ -21,8 +22,12 @@ import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.inject.Inject;
 import com.google.inject.Scopes;
 
+import java.io.IOException;
+
 /** Reindex all projects at Gerrit daemon startup. */
 public class ReindexProjectsAtStartup implements LifecycleListener {
+  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
   private final ProjectIndexer projectIndexer;
   private final GitRepositoryManager repoMgr;
 
@@ -41,7 +46,13 @@ public class ReindexProjectsAtStartup implements LifecycleListener {
 
   @Override
   public void start() {
-    repoMgr.list().stream().forEach(projectIndexer::index);
+    repoMgr.list().stream().forEach(p -> {
+      try {
+        projectIndexer.index(p);
+      } catch (IOException e) {
+        logger.atSevere().log("Couldn't re-index project '%s", p);
+      }
+    });
   }
 
   @Override

@@ -1,63 +1,80 @@
 [submodule "modules/jgit"]
 	path = modules/jgit
 	url = ../jgit
+	branch = v6.6.0-WDv1-os
 
 [submodule "plugins/codemirror-editor"]
 	path = plugins/codemirror-editor
-	url = ../plugins/codemirror-editor
-	branch = .
+	url = https://gerrit.googlesource.com/plugins/codemirror-editor
+        branch = stable-3.7
 
 [submodule "plugins/commit-message-length-validator"]
 	path = plugins/commit-message-length-validator
-	url = ../plugins/commit-message-length-validator
-	branch = .
+	url = https://gerrit.googlesource.com/plugins/commit-message-length-validator
+        branch = stable-3.7
 
 [submodule "plugins/delete-project"]
 	path = plugins/delete-project
-	url = ../plugins/delete-project
+	url = ../gerrit-delete-project-plugin
 	branch = .
 
 [submodule "plugins/download-commands"]
 	path = plugins/download-commands
-	url = ../plugins/download-commands
-	branch = master
+	url = https://gerrit.googlesource.com/plugins/download-commands
+	branch = stable-3.7
 
 [submodule "plugins/gitiles"]
 	path = plugins/gitiles
-	url = ../plugins/gitiles
-	branch = .
+	url = https://gerrit.googlesource.com/plugins/gitiles
+	branch = stable-3.7
 
 [submodule "plugins/hooks"]
 	path = plugins/hooks
-	url = ../plugins/hooks
-	branch = .
+	url = https://gerrit.googlesource.com/plugins/hooks
+	branch = stable-3.7
 
 [submodule "plugins/plugin-manager"]
 	path = plugins/plugin-manager
-	url = ../plugins/plugin-manager
+	url = ../gerrit-plugin-manager-plugin
 	branch = .
 
 [submodule "plugins/replication"]
-	path = plugins/replication
-	url = ../plugins/replication
-	branch = .
+        path = plugins/replication
+	url = https://gerrit.googlesource.com/plugins/replication
+        branch = stable-3.7
 
 [submodule "plugins/reviewnotes"]
 	path = plugins/reviewnotes
-	url = ../plugins/reviewnotes
-	branch = .
+	url = https://gerrit.googlesource.com/plugins/reviewnotes
+	branch = stable-3.7
 
 [submodule "plugins/singleusergroup"]
 	path = plugins/singleusergroup
-	url = ../plugins/singleusergroup
-	branch = .
+	url = https://gerrit.googlesource.com/plugins/singleusergroup
+	branch = stable-3.7
 
 [submodule "plugins/webhooks"]
 	path = plugins/webhooks
-	url = ../plugins/webhooks
-	branch = .
+	url = https://gerrit.googlesource.com/plugins/webhooks
+	branch = stable-3.7
 
 [submodule "polymer-bridges"]
 	path = polymer-bridges
-	url = ../polymer-bridges
+	url = https://gerrit.googlesource.com/polymer-bridges
+	branch = stable-3.7
+
+# Additional WANdisco default plugins
+[submodule "plugins/lfs"]
+	path = plugins/lfs
+	url = ../gerrit-lfs-plugin
+	branch = .
+
+[submodule "plugins/its-base"]
+	path = plugins/its-base
+	url = ../gerrit-its-base-plugin
+	branch = .
+
+[submodule "plugins/its-jira"]
+	path = plugins/its-jira
+	url = ../gerrit-its-jira-plugin
 	branch = .

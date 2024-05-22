@@ -100,7 +100,7 @@ public class AllGroupsIndexer extends SiteIndexer<AccountGroup.UUID, InternalGro
           executor.submit(
               () -> {
                 try {
-                  groupCache.evict(uuid);
+                  groupCache.evict(uuid); // Why is this evict happening for each uuid whenever an evict all has already taken place?
                   InternalGroup internalGroup = reindexedGroups.get(uuid);
                   if (internalGroup != null) {
                     if (isFirstInsertForEntry.equals(IsFirstInsertForEntry.YES)) {

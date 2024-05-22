@@ -28,6 +28,8 @@ import com.google.gerrit.server.query.change.ChangeData;
 import com.google.gerrit.server.restapi.config.IndexChanges.Input;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -55,7 +57,7 @@ public class IndexChanges implements RestModifyView<ConfigResource, Input> {
   }
 
   @Override
-  public Response<String> apply(ConfigResource resource, Input input) {
+  public Response<String> apply(ConfigResource resource, Input input) throws IOException {
     if (input == null || input.changes == null) {
       return Response.ok("Nothing to index");
     }

@@ -24,6 +24,7 @@ import static com.google.gerrit.extensions.client.SubmitType.REBASE_IF_NECESSARY
 import static com.google.gerrit.testing.GerritJUnit.assertThrows;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.acceptance.AbstractDaemonTest;
 import com.google.gerrit.acceptance.NoHttpd;
 import com.google.gerrit.acceptance.PushOneCommit;
@@ -280,9 +281,17 @@ public class SubmitTypeRuleIT extends AbstractDaemonTest {
   }
 
   private static TestSubmitRuleInfo invalidPrologRuleInfo() {
+    final FluentLogger logger = FluentLogger.forEnclosingClass();
+
     TestSubmitRuleInfo info = new TestSubmitRuleInfo();
     info.status = "RULE_ERROR";
-    info.errorMessage = "operator expected after expression at: invalid prolog rule end_of_file.";
+
+    // Prolog evaluator will return a generic message if the log level is debug or higher as it redirects the
+    // specific log message to a file. See: PrologOptions.dryRunOptions
+    info.errorMessage = logger.atFine().isEnabled()
+            ? "Error evaluating project rules, check server log"
+            : "operator expected after expression at: invalid prolog rule end_of_file.";
+
     return info;
   }
 

@@ -52,6 +52,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
@@ -76,6 +77,7 @@ import com.google.gerrit.extensions.restapi.AuthException;
 import com.google.gerrit.extensions.restapi.BadRequestException;
 import com.google.gerrit.extensions.restapi.BinaryResult;
 import com.google.gerrit.extensions.restapi.CacheControl;
+import com.google.gerrit.extensions.restapi.Cacheability;
 import com.google.gerrit.extensions.restapi.DefaultInput;
 import com.google.gerrit.extensions.restapi.ETagView;
 import com.google.gerrit.extensions.restapi.IdString;
@@ -96,6 +98,7 @@ import com.google.gerrit.extensions.restapi.RestCollectionView;
 import com.google.gerrit.extensions.restapi.RestModifyView;
 import com.google.gerrit.extensions.restapi.RestReadView;
 import com.google.gerrit.extensions.restapi.RestResource;
+import com.google.gerrit.extensions.restapi.RestResource.HasETag;
 import com.google.gerrit.extensions.restapi.RestView;
 import com.google.gerrit.extensions.restapi.TopLevelResource;
 import com.google.gerrit.extensions.restapi.UnprocessableEntityException;
@@ -179,6 +182,7 @@ import java.lang.reflect.Type;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -188,6 +192,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -1897,7 +1902,7 @@ public class RestApiServlet extends HttpServlet {
 
     if (status.statusCode() < SC_BAD_REQUEST) {
       logger.atFinest().withCause(err).log("REST call finished: %d", status.statusCode());
-      return replyText(req, res, true, msg.toString());
+      return replyText(req, res, true, msg.toString(), err);
     }
     if (status.statusCode() >= SC_INTERNAL_SERVER_ERROR) {
       logger.atSevere().withCause(err).log("Error in %s %s", req.getMethod(), uriForLogging(req));
@@ -1957,7 +1962,7 @@ public class RestApiServlet extends HttpServlet {
     checkArgument(statusCode >= 400, "non-error status: %s", statusCode);
     res.setStatus(statusCode);
     logger.atFinest().withCause(err).log("REST call failed: %d", statusCode);
-    return replyText(req, res, true, msg);
+    return replyText(req, res, true, msg, err);
   }
 
   /**
@@ -1968,13 +1973,33 @@ public class RestApiServlet extends HttpServlet {
    * @param allowTracing whether it is allowed to log the reply if tracing is enabled, must not be
    *     set to {@code true} if the reply may contain sensitive data
    * @param text the text reply
+   * @param err the error that may have occurred
    * @return the length of the response
    */
   static long replyText(
-      @Nullable HttpServletRequest req, HttpServletResponse res, boolean allowTracing, String text)
+      @Nullable HttpServletRequest req, HttpServletResponse res, boolean allowTracing, String text, Throwable err)
       throws IOException {
+
+    // Sometimes the err can contain much more useful information but it
+    // can also be the same as text message but with class info as a prefix
+    // only report the error if it is different.
+    boolean duplicate = false;
+    String errorMessage = err.getMessage();
+
+    if (!Strings.isNullOrEmpty(errorMessage) && errorMessage.endsWith(text)){
+      duplicate = true;
+    }
     if (!text.endsWith("\n")) {
       text += "\n";
+    }
+
+    if (!Strings.isNullOrEmpty(errorMessage) && !duplicate){
+      // report any additional errors
+      text += String.format("Error details : %s\n", errorMessage);
+
+      if (err.getCause() != null && !Strings.isNullOrEmpty(err.getCause().getMessage())){
+        text += String.format("Cause : %s\n", err.getCause().getMessage());
+      }
     }
     if (allowTracing) {
       logger.atFinest().log("Text response body:\n%s", text);

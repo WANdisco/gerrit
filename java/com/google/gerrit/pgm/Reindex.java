@@ -29,6 +29,7 @@ import com.google.gerrit.index.SiteIndexer;
 import com.google.gerrit.lifecycle.LifecycleManager;
 import com.google.gerrit.lucene.LuceneIndexModule;
 import com.google.gerrit.pgm.util.BatchProgramModule;
+import com.google.gerrit.server.util.GuiceUtils;
 import com.google.gerrit.pgm.util.SiteProgram;
 import com.google.gerrit.server.LibModuleLoader;
 import com.google.gerrit.server.ModuleOverloader;
@@ -42,6 +43,8 @@ import com.google.gerrit.server.index.options.AutoFlush;
 import com.google.gerrit.server.index.options.BuildBloomFilter;
 import com.google.gerrit.server.index.options.IsFirstInsertForEntry;
 import com.google.gerrit.server.plugins.PluginGuiceEnvironment;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
 import com.google.gerrit.server.util.ReplicaUtil;
 import com.google.inject.AbstractModule;
 import com.google.inject.Inject;
@@ -112,6 +115,9 @@ public class Reindex extends SiteProgram {
     dbManager.add(dbInjector);
     dbManager.start();
 
+    // GER-1889: We cannot allow the plugin environment to copy instance information when in a shared context.
+    PluginGuiceEnvironment.setAllowCopyOfReplicatedCoordinatorInstance(false);
+    
     sysInjector = createSysInjector();
     sysInjector.getInstance(PluginGuiceEnvironment.class).setDbCfgInjector(dbInjector, cfgInjector);
     LifecycleManager sysManager = new LifecycleManager();
@@ -214,6 +220,12 @@ public class Reindex extends SiteProgram {
           }
         });
     modules.add(new BatchProgramModule(dbInjector));
+
+    // if replicatedConfiguration was ever true, then we would need to bind a real ReplicatedEventsCoordinatorImpl
+    if (!GuiceUtils.hasBinding(dbInjector, ReplicatedEventsCoordinator.class)) {
+      modules.add(new NonReplicatedCoordinatorModule());
+    }
+
     modules.add(
         new FactoryModule() {
           @Override
@@ -239,6 +251,11 @@ public class Reindex extends SiteProgram {
 
     // Disable auto-reindexing if stale, since there are no concurrent writes to race with.
     globalConfig.setBoolean("index", null, "autoReindexIfStale", false);
+
+    // Batch operation entry-points should be run with replication disabled. Here we are setting a WANdisco section
+    // and key/val pair to ensure that property. (N.B. All users of BatchProgramModule should potentially be doing this
+    // but as of 3.x it appears Reindex is the only user.)
+    globalConfig.setBoolean("wandisco", null, "gerritmsReplicationDisabled", true);
   }
 
   private <K, V, I extends Index<K, V>> boolean reindex(IndexDefinition<K, V, I> def) {

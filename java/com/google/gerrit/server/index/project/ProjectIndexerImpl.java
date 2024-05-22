@@ -30,8 +30,12 @@ import com.google.gerrit.server.logging.TraceContext.TraceTimer;
 import com.google.gerrit.server.plugincontext.PluginSetContext;
 import com.google.gerrit.server.project.ProjectCache;
 import com.google.gerrit.server.project.ProjectState;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.inject.Provider;
 import com.google.inject.assistedinject.Assisted;
 import com.google.inject.assistedinject.AssistedInject;
+
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
@@ -45,7 +49,6 @@ public class ProjectIndexerImpl implements ProjectIndexer {
 
   public interface Factory {
     ProjectIndexerImpl create(ProjectIndexCollection indexes);
-
     ProjectIndexerImpl create(@Nullable ProjectIndex index);
   }
 
@@ -53,31 +56,76 @@ public class ProjectIndexerImpl implements ProjectIndexer {
   private final PluginSetContext<ProjectIndexedListener> indexedListener;
   @Nullable private final ProjectIndexCollection indexes;
   @Nullable private final ProjectIndex index;
+  private final Provider<ReplicatedEventsCoordinator> providedEventsCoordinator;
+  private ReplicatedEventsCoordinator replicatedEventsCoordinator;
 
   @AssistedInject
   ProjectIndexerImpl(
       ProjectCache projectCache,
       PluginSetContext<ProjectIndexedListener> indexedListener,
-      @Assisted ProjectIndexCollection indexes) {
+      @Assisted ProjectIndexCollection indexes,
+      Provider<ReplicatedEventsCoordinator> providedEventsCoordinator) {
     this.projectCache = projectCache;
     this.indexedListener = indexedListener;
     this.indexes = indexes;
     this.index = null;
+    this.providedEventsCoordinator = providedEventsCoordinator;
+
   }
 
   @AssistedInject
   ProjectIndexerImpl(
       ProjectCache projectCache,
       PluginSetContext<ProjectIndexedListener> indexedListener,
-      @Assisted @Nullable ProjectIndex index) {
+      @Assisted @Nullable ProjectIndex index,
+      Provider<ReplicatedEventsCoordinator> providedEventsCoordinator) {
     this.projectCache = projectCache;
     this.indexedListener = indexedListener;
     this.indexes = null;
     this.index = index;
+    this.providedEventsCoordinator = providedEventsCoordinator;
+
+  }
+
+  public ReplicatedEventsCoordinator getProvidedEventsCoordinator(){
+    if(replicatedEventsCoordinator == null){
+      replicatedEventsCoordinator = providedEventsCoordinator.get();
+    }
+    return replicatedEventsCoordinator;
+  }
+
+  /**
+   * Asks the replicated coordinator for an instance of the ReplicatedOutgoingProjectIndexFeed
+   * and calls replicateReindex on it with the account Id.
+   */
+  public void replicateReindex(Project.NameKey projectName, boolean deleteFromIndex) throws IOException {
+    if(getProvidedEventsCoordinator().isReplicationEnabled()) {
+      getProvidedEventsCoordinator().getReplicatedOutgoingProjectIndexEventsFeed()
+          .replicateReindex(projectName, deleteFromIndex);
+    }
   }
 
   @Override
-  public void index(Project.NameKey nameKey) {
+  public void index(Project.NameKey nameKey) throws IOException {
+    indexImplementation(nameKey, getProvidedEventsCoordinator().isReplicationEnabled());
+  }
+
+  @Override
+  public void indexNoRepl(Project.NameKey nameKey) throws IOException {
+    indexImplementation(nameKey, false);
+  }
+
+  @Override
+  public void deleteIndex(Project.NameKey nameKey) throws IOException {
+    deleteIndexImpl(nameKey, getProvidedEventsCoordinator().isReplicationEnabled());
+  }
+
+  @Override
+  public void deleteIndexNoRepl(Project.NameKey nameKey) throws IOException {
+    deleteIndexImpl(nameKey, false);
+  }
+
+  public void indexImplementation(Project.NameKey nameKey, boolean replicate) throws IOException {
     Optional<ProjectState> projectState = projectCache.get(nameKey);
     if (projectState.isPresent()) {
       logger.atFine().log("Replace project %s in index", nameKey.get());
@@ -119,6 +167,25 @@ public class ProjectIndexerImpl implements ProjectIndexer {
               e);
         }
       }
+    }
+    if ( replicate ) {
+      replicateReindex(nameKey, false);
+    }
+  }
+
+
+  public void deleteIndexImpl(Project.NameKey nameKey, boolean replicate) throws IOException {
+    logger.atFine().log("Delete project %s from index", nameKey.get());
+    for (ProjectIndex i : getWriteIndexes()) {
+      try (TraceTimer traceTimer =
+               TraceContext.newTimer(String.format("Deleting project %s in index version %d",
+                   nameKey.get(), i.getSchema().getVersion()))) {
+        i.delete(nameKey);
+      }
+    }
+
+    if ( replicate ) {
+      replicateReindex(nameKey, true);
     }
   }
 

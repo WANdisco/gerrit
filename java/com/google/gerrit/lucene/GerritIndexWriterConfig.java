@@ -18,16 +18,22 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.MINUTES;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.server.config.ConfigUtil;
 import org.apache.lucene.analysis.CharArraySet;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.index.ConcurrentMergeScheduler;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
+import org.apache.lucene.util.InfoStream;
 import org.eclipse.jgit.lib.Config;
 
 /** Combination of Lucene {@link IndexWriterConfig} with additional Gerrit-specific options. */
 class GerritIndexWriterConfig {
+
+  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+  public static final InfoStream VERBOSE = new VerboseOutput();
+
   private static final ImmutableMap<String, String> CUSTOM_CHAR_MAPPING =
       ImmutableMap.of("_", " ", ".", " ");
 
@@ -35,6 +41,10 @@ class GerritIndexWriterConfig {
   private long commitWithinMs;
   private final CustomMappingAnalyzer analyzer;
 
+  /**
+  * Note that GerritIndexWriterConfig takes both a cfg object and a name.
+  * Name is the name of the subsection, i.e changes_open / change_closed
+  */
   GerritIndexWriterConfig(Config cfg, String name) {
     analyzer =
         new CustomMappingAnalyzer(
@@ -75,6 +85,32 @@ class GerritIndexWriterConfig {
     } catch (IllegalArgumentException e) {
       commitWithinMs = cfg.getLong("index", name, "commitWithin", 0);
     }
+
+    //Checking that it has been set correctly and if so turn the verbose logging on
+    //for Lucene.
+    if (cfg.getBoolean("index", name, "verboseLogging", false)) {
+      // turn on verbose logging for lucene
+      luceneConfig.setInfoStream(VERBOSE);
+      // Show the current configuration.
+      logger.atInfo().log("Current lucene configuration: %s", luceneConfig);
+    }
+  }
+
+  private static class VerboseOutput extends InfoStream {
+    VerboseOutput() { }
+
+    @Override
+    public void message(String component, String message) {
+      logger.atInfo().log(message);
+    }
+
+    @Override
+    public boolean isEnabled(String component) {
+      return true;
+    }
+
+    @Override
+    public void close() {}
   }
 
   CustomMappingAnalyzer getAnalyzer() {

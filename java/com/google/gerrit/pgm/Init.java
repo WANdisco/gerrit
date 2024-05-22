@@ -17,6 +17,7 @@ package com.google.gerrit.pgm;
 import static java.util.stream.Collectors.joining;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -239,7 +240,8 @@ public class Init extends BaseInit {
   }
 
   void startDaemon(SiteRun run) {
-    String[] argv = {run.site.gerrit_sh.toAbsolutePath().toString(), "start"};
+    String[] argv = {run.site.gerrit_sh.toAbsolutePath().toString(), "start",
+                     "--props=" + getJavaPropertiesAsString()};
     Process proc;
     try {
       System.err.println("Executing " + argv[0] + " " + argv[1]);
@@ -269,6 +271,26 @@ public class Init extends BaseInit {
         // retry
       }
     }
+  }
+
+  private static String getJavaPropertiesAsString(){
+    final StringBuilder properties = new StringBuilder();
+    for (final String property : System.getProperties().stringPropertyNames()) {
+      if (shouldPropagateProperty(property)) {
+        final String value = System.getProperty(property);
+        if (!Strings.isNullOrEmpty(value)) {
+          final String prop = String.format("-D%s=%s ", property, value);
+          properties.append(prop);
+        }
+      }
+    }
+    return properties.toString();
+  }
+
+  private static boolean shouldPropagateProperty(final String key){
+    return key.equals("gerritms_replication_disabled") ||
+           key.equals("gerritms_event_filename_validation_enabled") ||
+           key.contains("wandisco");
   }
 
   private void verifyInstallPluginList(ConsoleUI ui, List<PluginData> plugins) {

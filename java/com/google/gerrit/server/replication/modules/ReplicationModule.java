@@ -1,0 +1,55 @@
+package com.google.gerrit.server.replication.modules;
+
+import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableMap;
+import com.google.gerrit.entities.EntitiesAdapterFactory;
+import com.google.gerrit.entities.Project;
+import com.google.gerrit.server.replication.gson.ImmutableMapTypeAdapter;
+import com.google.gerrit.server.events.ProjectNameKeyAdapter;
+import com.google.gerrit.server.replication.GerritEventFactory;
+import com.google.gerrit.server.replication.feeds.ReplicatedOutgoingServerEventsFeed;
+import com.google.gerrit.lifecycle.LifecycleModule;
+import com.google.gerrit.server.events.Event;
+import com.google.gerrit.server.events.EventDeserializer;
+import com.google.gerrit.server.events.SupplierDeserializer;
+import com.google.gerrit.server.events.SupplierSerializer;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import com.google.inject.Provides;
+import com.google.inject.Singleton;
+import com.google.inject.name.Named;
+
+
+public class ReplicationModule extends LifecycleModule {
+
+  @Override
+  protected void configure() {
+    /* Sets up the bindings for the ReplicatedEventsCoordinator*/
+    install(new ReplicatedCoordinatorModule());
+    /* The ReplicatedOutgoingEventsFeed differs to the other feeds in that it sets up an EventListener
+     * and registers that listener with the EventBroker. It also does not need a member variable inside the
+     * ReplicatedEventsCoordinator as no other class needs to access it via a getter. For this reason it is
+     * distinct from the other feeds and does not need to be instantiated by the ReplicatedEventsCoordinator.*/
+    install(new ReplicatedOutgoingServerEventsFeed.Module());
+    /* GerritEventFactory is a utility class full of static methods. It needs static injection for the
+       provided Gson instance*/
+    install(new GerritEventFactory.Module());
+  }
+
+  @Provides
+  @Named("wdGson")
+  @Singleton
+  public Gson provideGson(){
+    /* Configure how we wish to specify/change any data going through our gson serialization.
+     */
+    return new GsonBuilder()
+        .registerTypeAdapter(Supplier.class, new SupplierSerializer())
+        .registerTypeAdapter(Supplier.class, new SupplierDeserializer())
+        .registerTypeAdapter(Event.class, new EventDeserializer())
+        .registerTypeAdapter(ImmutableMap.class, new ImmutableMapTypeAdapter())
+        .registerTypeAdapterFactory(EntitiesAdapterFactory.create())
+        .registerTypeHierarchyAdapter(Project.NameKey.class, new ProjectNameKeyAdapter())
+        .create();
+  }
+}

@@ -14,17 +14,20 @@
 
 package com.google.gerrit.server.index.account;
 
+import com.google.gerrit.server.replication.customevents.ReplicatedAccountIndexer;
 import com.google.gerrit.entities.Account;
 
+import java.io.IOException;
+
 /** Interface for indexing a Gerrit account. */
-public interface AccountIndexer {
+public interface AccountIndexer extends ReplicatedAccountIndexer {
 
   /**
    * Synchronously index an account.
    *
    * @param id account id to index.
    */
-  void index(Account.Id id);
+  void index(Account.Id id) throws IOException;
 
   /**
    * Synchronously reindex an account if it is stale.

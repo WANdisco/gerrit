@@ -27,6 +27,8 @@ import com.github.rholder.retry.RetryerBuilder;
 import com.github.rholder.retry.StopStrategies;
 import com.github.rholder.retry.WaitStrategies;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -39,7 +41,9 @@ import com.google.gerrit.git.LockFailureException;
 import com.google.gerrit.git.RefUpdateUtil;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
 import com.google.gerrit.server.git.GitRepositoryManager;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -47,6 +51,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import com.google.gerrit.server.replication.configuration.ReplicationConstants;
+import com.google.inject.Inject;
+import com.wandisco.gerrit.gitms.shared.api.exceptions.GitUpdateException;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.RefUpdate;
@@ -73,28 +82,73 @@ public class RepoSequence {
   }
 
   @VisibleForTesting
-  static RetryerBuilder<ImmutableList<Integer>> retryerBuilder() {
+  public static RetryerBuilder<ImmutableList<Integer>> retryerBuilder() {
+    return retryerBuilder(30);
+  }
+
+  @VisibleForTesting
+  static RetryerBuilder<ImmutableList<Integer>> retryerBuilder(long maxWait) {
+    Predicate<Throwable> isLockFailure = t -> t instanceof StorageException
+        && ((StorageException) t).getCause() instanceof LockFailureException;
+
+    // GER-2090: Worth pointing out that down below there is a direct call to retryer.call(),
+    // and that we are not using RetryHelper in this class.
+    //
+    // GER-2105: Narrowing down with extra checks, so that we don't retry every time we have REJECTED_OTHER_REASON.
+    // We only want to retry on a lock error.
+    // See GitUpdateHandlerBase.resultIsNonTransientError (within git-ms-replicator project).
+    // For instance, if we get REJECTED_OTHER_REASON with REF_NAME_CONFLICT, we definitely don't want to retry as there
+    // is no chance of success.
+    //
+    // Essentially, we only want to retry if gerrit is rebuilding the request to GitMS, and there is a high chance of success.
+    Predicate<Throwable> isGitUpdateExceptionWithLockError = t -> {
+      if (t instanceof StorageException
+          && ((StorageException) t).getCause() instanceof IOException) {
+        IOException ex = ((IOException)((StorageException) t).getCause());
+
+        if (ex.getCause() instanceof GitUpdateException) {
+          GitUpdateException gitUpdateException = (GitUpdateException) ex.getCause();
+          String exceptionMessage = gitUpdateException.getMessage();
+
+          if (exceptionMessage != null) {
+            boolean match = exceptionMessage.contains(ReplicationConstants.REJECTED_OTHER_REASON) &&
+                            exceptionMessage.contains(ReplicationConstants.REJECTED_OLD_REPOSITORY_STATE_PREFIX) &&
+                            exceptionMessage.contains(ReplicationConstants.REJECTED_CLIENT_SHOULD_UPDATE_SUFFIX) &&
+                            exceptionMessage.contains(ReplicationConstants.CLIENT_ERROR);
+            logger.atFine().log("GitUpdateException message = %s predicate match = %s",exceptionMessage, match);
+            return match;
+          }
+          return false;
+        }
+      }
+      return false;
+    };
+
+    // GerritMS: Due to replication we may also get a git update exception. See GER-1522 & GER-2090
     return RetryerBuilder.<ImmutableList<Integer>>newBuilder()
         .retryIfException(
-            t ->
-                t instanceof StorageException
-                    && ((StorageException) t).getCause() instanceof LockFailureException)
+            Predicates.or(isLockFailure, isGitUpdateExceptionWithLockError))
         .withWaitStrategy(
             WaitStrategies.join(
                 WaitStrategies.exponentialWait(5, TimeUnit.SECONDS),
                 WaitStrategies.randomWait(50, TimeUnit.MILLISECONDS)))
-        .withStopStrategy(StopStrategies.stopAfterDelay(30, TimeUnit.SECONDS));
+        .withStopStrategy(StopStrategies.stopAfterDelay(maxWait, TimeUnit.SECONDS));
   }
 
-  private static final Retryer<ImmutableList<Integer>> RETRYER = retryerBuilder().build();
+  public static void setSequenceRetryMaxTimeoutSecs(int sequenceRetryMaxTimeoutSecsIn){
+    //need to rebuild with the given retry timeout
+    RETRYER = retryerBuilder(sequenceRetryMaxTimeoutSecsIn).build();
+  }
 
+  private static Retryer<ImmutableList<Integer>> RETRYER = retryerBuilder(5).build();
+
+  private final ReplicatedConfiguration replicatedConfiguration;
   private final GitRepositoryManager repoManager;
   private final GitReferenceUpdated gitRefUpdated;
   private final Project.NameKey projectName;
   private final String refName;
   private final Seed seed;
   private final int floor;
-  private final int batchSize;
   private final Runnable afterReadRef;
   private final Retryer<ImmutableList<Integer>> retryer;
 
@@ -104,9 +158,12 @@ public class RepoSequence {
   private int limit;
   private int counter;
 
+  @VisibleForTesting final int batchSize;
+
   @VisibleForTesting int acquireCount;
 
   public RepoSequence(
+      ReplicatedConfiguration replicatedConfiguration,
       GitRepositoryManager repoManager,
       GitReferenceUpdated gitRefUpdated,
       Project.NameKey projectName,
@@ -114,6 +171,7 @@ public class RepoSequence {
       Seed seed,
       int batchSize) {
     this(
+        replicatedConfiguration,
         repoManager,
         gitRefUpdated,
         projectName,
@@ -126,6 +184,7 @@ public class RepoSequence {
   }
 
   public RepoSequence(
+      ReplicatedConfiguration replicatedConfiguration,
       GitRepositoryManager repoManager,
       GitReferenceUpdated gitRefUpdated,
       Project.NameKey projectName,
@@ -134,6 +193,7 @@ public class RepoSequence {
       int batchSize,
       int floor) {
     this(
+        replicatedConfiguration,
         repoManager,
         gitRefUpdated,
         projectName,
@@ -146,7 +206,9 @@ public class RepoSequence {
   }
 
   @VisibleForTesting
-  RepoSequence(
+  @Inject
+  public RepoSequence(
+      ReplicatedConfiguration replicatedConfiguration,
       GitRepositoryManager repoManager,
       GitReferenceUpdated gitRefUpdated,
       Project.NameKey projectName,
@@ -155,10 +217,11 @@ public class RepoSequence {
       int batchSize,
       Runnable afterReadRef,
       Retryer<ImmutableList<Integer>> retryer) {
-    this(repoManager, gitRefUpdated, projectName, name, seed, batchSize, afterReadRef, retryer, 0);
+      this(replicatedConfiguration, repoManager, gitRefUpdated, projectName, name, seed, batchSize, afterReadRef, retryer, 0);
   }
 
   RepoSequence(
+      ReplicatedConfiguration replicatedConfiguration,
       GitRepositoryManager repoManager,
       GitReferenceUpdated gitRefUpdated,
       Project.NameKey projectName,
@@ -168,6 +231,7 @@ public class RepoSequence {
       Runnable afterReadRef,
       Retryer<ImmutableList<Integer>> retryer,
       int floor) {
+    this.replicatedConfiguration = requireNonNull(replicatedConfiguration, "replicatedConfiguration");
     this.repoManager = requireNonNull(repoManager, "repoManager");
     this.gitRefUpdated = requireNonNull(gitRefUpdated, "gitRefUpdated");
     this.projectName = requireNonNull(projectName, "projectName");
@@ -247,6 +311,12 @@ public class RepoSequence {
           });
     } catch (ExecutionException | RetryException e) {
       if (e.getCause() != null) {
+        Throwable rootCause = ExceptionUtils.getRootCause(e);
+        if (rootCause instanceof ConnectException) {
+          // Replicated case: Couldn't store next sequence as GitMS is offline.
+          logger.atWarning().withCause(e).log("Attempt to get next sequence for %s while GitMS was unreachable.", refName);
+          throw new StorageException(String.format("Can't get next sequence batch for %s", refName), rootCause);
+        }
         Throwables.throwIfInstanceOf(e.getCause(), StorageException.class);
       }
       throw new StorageException(e);
@@ -280,8 +350,9 @@ public class RepoSequence {
         next = blob.get().value();
       }
       next = Math.max(floor, next);
+      String tag = replicationTagForBlob();
       RefUpdate refUpdate =
-          IntBlob.tryStore(repo, rw, projectName, refName, oldId, next + count, gitRefUpdated);
+          IntBlob.tryStore(repo, rw, projectName, refName, oldId, tag, next + count, gitRefUpdated);
       RefUpdateUtil.checkResult(refUpdate);
       counter = next;
       limit = counter + count;
@@ -309,8 +380,9 @@ public class RepoSequence {
       } else {
         oldId = blob.get().id();
       }
+      String tag = replicationTagForBlob();
       RefUpdate refUpdate =
-          IntBlob.tryStore(repo, rw, projectName, refName, oldId, value, gitRefUpdated);
+          IntBlob.tryStore(repo, rw, projectName, refName, oldId, tag, value, gitRefUpdated);
       RefUpdateUtil.checkResult(refUpdate);
       counter = value;
       limit = counter + batchSize;
@@ -351,5 +423,26 @@ public class RepoSequence {
       next();
     }
     return counter - 1;
+  }
+
+  /* Get a tag that we can include in our sequence blob. For vanilla or non-replicated Gerrit
+   * this will just be an empty string, but for replicated flow we return the node-id so that
+   * the tagged blob will contain a tuple of {node-id}:{sequence}. This is so that sequence blobs
+   * created by different nodes will hash differently. This will cause GitMS to differentiate sequence
+   * numbers coming from different nodes.
+   *
+   * NOTE: Do not to attempt to switch between replication on or off once installed without manually fixing
+   *  the sequence information.
+   */
+  private String replicationTagForBlob() {
+
+    // If replication is disabled, just store the sequence number directly as we don't need to disambiguate the blobs
+    // by node-id.
+    if (!replicatedConfiguration.isReplicationEnabled()) {
+      return "";
+    }
+
+    // The format of the tuple in the replicated scenario will be NodeId:Sequence#.
+    return requireNonNull(replicatedConfiguration.getThisNodeIdentity());
   }
 }

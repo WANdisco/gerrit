@@ -24,6 +24,7 @@ import com.google.gerrit.entities.Project;
 import com.google.gerrit.extensions.registration.DynamicItem;
 import com.google.gerrit.lifecycle.LifecycleModule;
 import com.google.gerrit.server.CurrentUser;
+import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.config.GerritInstanceId;
 import com.google.gerrit.server.notedb.ChangeNotes;
 import com.google.gerrit.server.permissions.ChangePermission;
@@ -39,9 +40,12 @@ import com.google.gerrit.server.project.ProjectState;
 import com.google.gson.Gson;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import org.eclipse.jgit.lib.Config;
 import java.util.Optional;
 
-/** Distributes Events to listeners if they are allowed to see them */
+/**
+ * Distributes Events to listeners if they are allowed to see them
+ */
 @Singleton
 public class EventBroker implements EventDispatcher {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -56,18 +60,22 @@ public class EventBroker implements EventDispatcher {
     }
   }
 
-  /** Listeners to receive changes as they happen (limited by visibility of user). */
+  /**
+   * Listeners to receive changes as they happen (limited by visibility of user).
+   */
   protected final PluginSetContext<UserScopedEventListener> listeners;
 
-  /** Listeners to receive all changes as they happen. */
+  /**
+   * Listeners to receive all changes as they happen.
+   */
   protected final PluginSetContext<EventListener> unrestrictedListeners;
 
   private final PermissionBackend permissionBackend;
   protected final ProjectCache projectCache;
-
   protected final ChangeNotes.Factory notesFactory;
 
   protected final String gerritInstanceId;
+
 
   @Inject
   public EventBroker(
@@ -219,4 +227,16 @@ public class EventBroker implements EventDispatcher {
     }
     return true;
   }
+
+
+  /**
+   * This method updates the unrestricted set of listeners.
+   *
+   * We use this method, to add listeners without having them really be plugin contexts....
+   * TODO: (trevorg) Move ReplicationEventManager listener to be a plugin context and this can disappear.
+   */
+  public void registerUnrestrictedEventListener(String name, EventListener unrestrictedListener) {
+    this.unrestrictedListeners.registerImplementation(name, unrestrictedListener);
+  }
+
 }

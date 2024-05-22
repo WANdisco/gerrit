@@ -1,0 +1,26 @@
+features:
+- "New property gerrit.replicated.cache.names.to.ignore has been added to allow control of default ignored caches. See [Replicated cache names to ignore](https://docs.cirata.com/gerrit/3.7.0/index.html#_replicated_cache_names_to_ignore)."
+fixes:
+- "GerritMS 3.7.0 is based on Gerrit 3.7.6+ there are additional fixes included. One of those was to fix [CVE-2023-48795](https://nvd.nist.gov/vuln/detail/CVE-2023-48795)"
+issues:
+- "Gerrit 'experimental features' are not supported in GerritMS 3.7.0."
+- "Plugin 'web-hooks' must only be deployed on a single node (or duplication of notifications will result)."
+other:
+- "The 3.7 release of Gerrit requires that 'jgit' configuration items be moved into the ${site}/etc/jgit.config file. If you were running earlier version(s) of Gerrit you may have 'jgit' configurations in 'gerrit.config' or in the OS account that Gerrit runs as in the ~/.gitconfig configuration files. Gerrit default is for receive.autogc = false in order to prevent possible overwhelming of Java Object Heap Garbage Collection."
+- "Gerrit has introduced a new feature which allows deadlines to be set on requests at either a server or client level. See [Gerrit user-request-cancellation-and-deadlines](https://gerrit-documentation.storage.googleapis.com/Documentation/3.5.0/user-request-cancellation-and-deadlines.html) It is strongly recommended to not use this feature. Such deadlines are necessarily longer in a fully primary/primary setup, especially when large latencies exist between servers. Use of this feature could cause non-atomic operations resulting in a half-finished state requiring manual administrative cleanup."
+- |
+  GitMS 'application.properties' property 'gerrit.replicated.cache.names.to.ignore', by default includes the following caches:
+
+  lfs_locks,
+  jira_server_project,
+  its_rules_project,
+  change_notes,
+  default_preferences,
+  pure_revert,
+  groups_external_persisted,
+  groups_byuuid_persisted,
+  persisted_projects,
+  git_tags,
+  oauth_tokens
+
+  If you want to replicate one of those, you must create the property and assign the value of all of the following (comma separated) except the one you want to replicate. See [Replicated cache names to ignore](https://docs.cirata.com/gerrit/3.7.0/index.html#_replicated_cache_names_to_ignore).

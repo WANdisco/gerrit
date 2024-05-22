@@ -17,6 +17,7 @@ package com.google.gerrit.server.query.change;
 import com.google.common.cache.Cache;
 import com.google.gerrit.server.cache.CacheModule;
 import com.google.gerrit.server.cache.serialize.BooleanCacheSerializer;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Singleton;
@@ -26,6 +27,7 @@ import java.util.concurrent.ExecutionException;
 
 @Singleton
 public class ConflictsCacheImpl implements ConflictsCache {
+  @SkipCacheReplication
   public static final String NAME = "conflicts";
 
   public static Module module() {

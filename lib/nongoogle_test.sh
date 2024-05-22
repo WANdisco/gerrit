@@ -16,10 +16,13 @@ cglib-3_2
 commons-io
 dropwizard-core
 eddsa
+equalsverifier
 error-prone-annotations
 flogger
 flogger-log4j-backend
+flogger-slf4j-backend
 flogger-system-backend
+gerrit-gitms-shared
 guava
 guava-testlib
 guice-assistedinject
@@ -28,6 +31,11 @@ guice-servlet
 hamcrest
 impl-log4j
 j2objc
+jackson-annotations
+jackson-core
+jackson-databind
+javassist
+javax-activation
 jcl-over-slf4j
 jimfs
 jruby
@@ -42,6 +50,7 @@ mina-core
 nekohtml
 objenesis
 openid-consumer
+reflections
 soy
 sshd-mina
 sshd-osgi

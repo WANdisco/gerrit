@@ -19,6 +19,7 @@ import com.google.gerrit.common.Nullable;
 import com.google.gerrit.entities.AccountGroup;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.exceptions.StorageException;
+
 import java.io.IOException;
 import java.util.Optional;
 import java.util.Set;
@@ -63,33 +64,33 @@ public interface ProjectCache {
    *
    * @param p the NameKey of the project that is being evicted
    */
-  void evict(Project.NameKey p);
+  void evict(Project.NameKey p) throws IOException;
 
   /**
    * Invalidate the cached information about the given project, and triggers reindexing for it
    *
    * @param p project that is being evicted
    */
-  void evictAndReindex(Project p);
+  void evictAndReindex(Project p) throws IOException;
 
   /**
    * Invalidate the cached information about the given project, and triggers reindexing for it
    *
    * @param p the NameKey of the project that is being evicted
    */
-  void evictAndReindex(Project.NameKey p);
+  void evictAndReindex(Project.NameKey p) throws IOException;
 
   /**
    * Remove information about the given project from the cache. It will no longer be returned from
    * {@link #all()}.
    */
-  void remove(Project p);
+  void remove(Project p) throws IOException;
 
   /**
    * Remove information about the given project from the cache. It will no longer be returned from
    * {@link #all()}.
    */
-  void remove(Project.NameKey name);
+  void remove(Project.NameKey name) throws IOException;
 
   /** Returns sorted iteration of projects. */
   ImmutableSortedSet<Project.NameKey> all();
@@ -111,6 +112,8 @@ public interface ProjectCache {
    */
   ImmutableSortedSet<Project.NameKey> byName(String prefix);
 
-  /** Notify the cache that a new project was constructed. */
+  /**
+   *  Notify the cache that a new project was constructed. */
   void onCreateProject(Project.NameKey newProjectName) throws IOException;
+
 }

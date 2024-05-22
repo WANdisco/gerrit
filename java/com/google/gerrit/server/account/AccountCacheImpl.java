@@ -27,18 +27,23 @@ import com.google.gerrit.exceptions.StorageException;
 import com.google.gerrit.server.account.externalids.ExternalIdKeyFactory;
 import com.google.gerrit.server.account.externalids.ExternalIds;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.config.AllUsersName;
+import com.google.gerrit.server.index.account.AccountIndexer;
 import com.google.gerrit.server.config.CachedPreferences;
 import com.google.gerrit.server.config.DefaultPreferencesCache;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.server.util.time.TimeUtil;
 import com.google.inject.Inject;
 import com.google.inject.Module;
+import com.google.inject.Provider;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
+
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
@@ -49,11 +54,14 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
 
-/** Caches important (but small) account state to avoid database hits. */
+/**
+ * Caches important (but small) account state to avoid database hits.
+ */
 @Singleton
 public class AccountCacheImpl implements AccountCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @ReplicatedCache
   private static final String BYID_AND_REV_NAME = "accounts";
 
   public static Module module() {
@@ -78,6 +86,8 @@ public class AccountCacheImpl implements AccountCache {
   private final AllUsersName allUsersName;
   private final DefaultPreferencesCache defaultPreferenceCache;
   private final ExternalIdKeyFactory externalIdKeyFactory;
+  @SuppressWarnings("unused") // TODO: Check if this still needed in 3.7+
+  private final Provider<AccountIndexer> indexer;
 
   @Inject
   AccountCacheImpl(
@@ -87,13 +97,17 @@ public class AccountCacheImpl implements AccountCache {
       GitRepositoryManager repoManager,
       AllUsersName allUsersName,
       DefaultPreferencesCache defaultPreferenceCache,
-      ExternalIdKeyFactory externalIdKeyFactory) {
+      ExternalIdKeyFactory externalIdKeyFactory,
+      Provider<AccountIndexer> indexer,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.externalIds = externalIds;
-    this.accountDetailsCache = accountDetailsCache;
+    this.accountDetailsCache = replicatedEventsCoordinator.createReplicatedLoadingCache(BYID_AND_REV_NAME,
+                    accountDetailsCache, replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
     this.repoManager = repoManager;
     this.allUsersName = allUsersName;
     this.defaultPreferenceCache = defaultPreferenceCache;
     this.externalIdKeyFactory = externalIdKeyFactory;
+    this.indexer = indexer;
   }
 
   @Override

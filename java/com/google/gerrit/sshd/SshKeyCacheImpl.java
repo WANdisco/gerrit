@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,9 +38,11 @@ import com.google.gerrit.server.account.externalids.ExternalId;
 import com.google.gerrit.server.account.externalids.ExternalIdKeyFactory;
 import com.google.gerrit.server.account.externalids.ExternalIds;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.server.ssh.SshKeyCache;
 import com.google.gerrit.server.ssh.SshKeyCreator;
 import com.google.inject.Inject;
@@ -35,6 +50,7 @@ import com.google.inject.Module;
 import com.google.inject.Singleton;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Named;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,13 +58,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+
 import org.eclipse.jgit.errors.ConfigInvalidException;
 
-/** Provides the {@link SshKeyCacheEntry}. */
+/**
+ * Provides the {@link SshKeyCacheEntry}.
+ */
 @Singleton
 public class SshKeyCacheImpl implements SshKeyCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @ReplicatedCache
   private static final String CACHE_NAME = "sshkeys";
 
   static final Iterable<SshKeyCacheEntry> NO_SUCH_USER = none();
@@ -58,7 +78,8 @@ public class SshKeyCacheImpl implements SshKeyCache {
     return new CacheModule() {
       @Override
       protected void configure() {
-        cache(CACHE_NAME, String.class, new TypeLiteral<Iterable<SshKeyCacheEntry>>() {})
+        cache(CACHE_NAME, String.class, new TypeLiteral<Iterable<SshKeyCacheEntry>>() {
+        })
             .loader(Loader.class);
         bind(SshKeyCacheImpl.class);
         bind(SshKeyCache.class).to(SshKeyCacheImpl.class);
@@ -74,8 +95,10 @@ public class SshKeyCacheImpl implements SshKeyCache {
   private final LoadingCache<String, Iterable<SshKeyCacheEntry>> cache;
 
   @Inject
-  SshKeyCacheImpl(@Named(CACHE_NAME) LoadingCache<String, Iterable<SshKeyCacheEntry>> cache) {
-    this.cache = cache;
+  SshKeyCacheImpl(@Named(CACHE_NAME) LoadingCache<String, Iterable<SshKeyCacheEntry>> cache,
+                  ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.cache = replicatedEventsCoordinator.createReplicatedLoadingCache(CACHE_NAME, cache,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
   }
 
   Iterable<SshKeyCacheEntry> get(String username) {

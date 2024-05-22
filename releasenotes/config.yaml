@@ -1,0 +1,27 @@
+template: |
+  # Remove sections you don't need.
+  features:
+    -
+  issues:
+    -
+  upgrade:
+    -
+  deprecations:
+    -
+  critical:
+    -
+  security:
+    -
+  fixes:
+    -
+  other:
+    -
+sections:
+  - [features, New Features]
+  - [issues, Known Issues]
+  - [upgrade, Upgrade Notes]
+  - [api, API Changes]
+  - [security, Security Issues]
+  - [fixes, Fixes]
+release_tag_re: (?:((v\d+\.\d+\.\d+-RP-\d+\.\d+\.\d+\.\d+)$|(?!-SNAPSHOT)))
+encoding: utf8

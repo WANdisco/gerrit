@@ -33,6 +33,8 @@ import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.common.Nullable;
 import com.google.gerrit.common.UsedAt;
 import com.google.gerrit.exceptions.StorageException;
+import com.google.gerrit.extensions.restapi.RestApiException;
+import com.google.gerrit.git.GitUpdateFailureException;
 import com.google.gerrit.metrics.Counter3;
 import com.google.gerrit.metrics.Description;
 import com.google.gerrit.metrics.Field;
@@ -45,6 +47,7 @@ import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.plugincontext.PluginSetContext;
 import com.google.gerrit.server.query.account.InternalAccountQuery;
 import com.google.gerrit.server.query.change.InternalChangeQuery;
+import com.google.gerrit.server.replication.configuration.ReplicationConstants;
 import com.google.gerrit.server.update.RetryableAction.Action;
 import com.google.gerrit.server.update.RetryableAction.ActionType;
 import com.google.gerrit.server.update.RetryableChangeAction.ChangeAction;
@@ -52,6 +55,8 @@ import com.google.gerrit.server.update.RetryableIndexQueryAction.IndexQueryActio
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
+
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -60,6 +65,8 @@ import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+
+import com.wandisco.gerrit.gitms.shared.api.exceptions.GitUpdateException;
 import org.eclipse.jgit.lib.Config;
 
 @Singleton
@@ -448,6 +455,51 @@ public class RetryHelper {
       String actionType, Action<T> action, Options opts, Predicate<Throwable> exceptionPredicate)
       throws Exception {
     MetricListener listener = new MetricListener();
+
+    // GER-2105: Narrowing down with extra checks, so that we don't retry every time we have REJECTED_OTHER_REASON.
+    // We only want to retry on a lock error.
+    // See GitUpdateHandlerBase.resultIsNonTransientError (within git-ms-replicator project).
+    // For instance, if we get REJECTED_OTHER_REASON with REF_NAME_CONFLICT, we definitely don't want to retry as there
+    // is no chance of success.
+    //
+    // Essentially, we only want to retry if gerrit is rebuilding the request to GitMS, and there is a high chance of success.
+    Predicate<Throwable> isGitUpdateExceptionWithLockError = t -> {
+      // There are multiple ways the GitUpdateException can be wrapped, and we don't care which way this happens.
+      // At present only look down to the third level.
+      Optional<GitUpdateException> optionalGitUpdateException = getGitUpdateExceptionFromStack(t);
+
+      if (optionalGitUpdateException.isPresent()) {
+        GitUpdateException gitUpdateException = optionalGitUpdateException.get();
+        String exceptionMessage = gitUpdateException.getMessage();
+
+        if (exceptionMessage != null) {
+          boolean match = isMessageLockError(exceptionMessage);
+          logger.atFine().log("GitUpdateException in RetryHelper message = %s predicate match = %s",exceptionMessage, match);
+          return match;
+        }
+        return false;
+      }
+      return false;
+    };
+
+    Predicate<Throwable> isGitUpdateFailureExceptionWithLockError = t -> {
+      Optional<GitUpdateFailureException> optionalGitUpdateFailureException = getGitUpdateFailureExceptionFromStack(t);
+
+      if (optionalGitUpdateFailureException.isPresent()) {
+        GitUpdateFailureException gitUpdateFailureException = optionalGitUpdateFailureException.get();
+        String exceptionMessage = gitUpdateFailureException.getMessage();
+
+        if (exceptionMessage != null) {
+          boolean match = isMessageLockError(exceptionMessage);
+          logger.atFine().log("GitUpdateFailureException in RetryHelper message = %s predicate match = %s",exceptionMessage, match);
+          return match;
+        }
+        return false;
+      }
+      return false;
+    };
+
+
     try (TraceContext traceContext = TraceContext.open()) {
       RetryerBuilder<T> retryerBuilder =
           createRetryerBuilder(
@@ -457,6 +509,18 @@ public class RetryHelper {
                 // exceptionPredicate checks for temporary errors for which the operation should be
                 // retried (e.g. LockFailure). The retry has good chances to succeed.
                 if (exceptionPredicate.test(t)) {
+                  // GER-2090: Add log line
+                  logger.atFine().log("exception predicate causing retry:attempt=%d", listener.getAttemptCount());
+                  return true;
+                }
+
+                // GER-2105: Due to replication we may also get a git update exception. See GER-1522 & GER-2090
+                if (isGitUpdateExceptionWithLockError.test(t)) {
+                  logger.atFine().log("GitUpdateException predicate causing retry:attempt=%d", listener.getAttemptCount());
+                  return true;
+                }
+                if (isGitUpdateFailureExceptionWithLockError.test(t)) {
+                  logger.atFine().log("GitUpdateFailureException predicate causing retry:attempt=%d", listener.getAttemptCount());
                   return true;
                 }
 
@@ -515,6 +579,35 @@ public class RetryHelper {
             listener.getAttemptCount() - 1);
       }
     }
+  }
+
+  private Optional<GitUpdateException> getGitUpdateExceptionFromStack(Throwable t) {
+    if (t instanceof GitUpdateException) {
+      return Optional.of((GitUpdateException)t);
+    } else if (t != null && t.getCause() instanceof GitUpdateException) {
+      return Optional.of((GitUpdateException)t.getCause());
+    } else if (t != null && t.getCause() != null && t.getCause().getCause() instanceof GitUpdateException) {
+      return Optional.of((GitUpdateException)t.getCause().getCause());
+    }
+    return Optional.empty();
+  }
+
+  private Optional<GitUpdateFailureException> getGitUpdateFailureExceptionFromStack(Throwable t) {
+    if (t instanceof GitUpdateFailureException) {
+      return Optional.of((GitUpdateFailureException)t);
+    } else if (t != null && t.getCause() instanceof GitUpdateFailureException) {
+      return Optional.of((GitUpdateFailureException)t.getCause());
+    } else if (t != null && t.getCause() != null && t.getCause().getCause() instanceof GitUpdateFailureException) {
+      return Optional.of((GitUpdateFailureException)t.getCause().getCause());
+    }
+    return Optional.empty();
+  }
+
+  private static boolean isMessageLockError(String exceptionMessage) {
+    return exceptionMessage.contains(ReplicationConstants.REJECTED_OTHER_REASON) &&
+        exceptionMessage.contains(ReplicationConstants.REJECTED_OLD_REPOSITORY_STATE_PREFIX) &&
+        exceptionMessage.contains(ReplicationConstants.REJECTED_CLIENT_SHOULD_UPDATE_SUFFIX) &&
+        exceptionMessage.contains(ReplicationConstants.CLIENT_ERROR);
   }
 
   public String formatCause(Throwable t) {

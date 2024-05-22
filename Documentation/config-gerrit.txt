@@ -21,6 +21,22 @@ Sample `etc/gerrit.config`:
   directory = /var/cache/gerrit
 ----
 
+[[wandisco]]
+=== Section wandisco
+
+[[wandisco.gerritmsReplicationDisabled]]wandisco.gerritmsReplicationDisabled::
++
+Boolean to enable or disable WANdisco replication.
+When set to true, WANdisco replication is disabled and Gerrit will run in standard vanilla.
+Disabling replication will prevent the replication of project, account and change indexing
+and caching. It also means that gerrit server events will not be replicated.
++
+NOTE: This flag is set as part of the GerritServerConfig instance as part of the AbstractDaemonTest
+class to prevent replication in integration tests.
+
++
+Default is false, replication enabled.
+
 [[reloadConfig]]
 === Reload `etc/gerrit.config`
 Some properties support being reloaded without restart when a `reload config`
@@ -1533,7 +1549,7 @@ Default is true.
 Maximum number of changes that can be chained together in the same repository
 to be submitted at once.
 +
-Default is 32767.
+Default is 1024.
 
 [[change.move]]change.move::
 +
@@ -2024,6 +2040,33 @@ additional file descriptors available for network sockets and other
 repository data manipulation.
 +
 Default on JGit is 128 file descriptors on all platforms.
+
+[[core.packedgitopenfilescachecleanenabled]]core.packedgitopenfilescachecleanenabled::
++
+Flag to enable a scheduled task to clean out stale references to
+deleted packfiles from the WindowCache. Stale references ie. open
+file descriptors now marked deleted can be caused by running an out
+of band GC using CGit from the command line.
++
+Default on JGit is true
+
+[[core.packedgitopenfilescachecleandelay]]core.packedgitopenfilescachecleandelay::
++
+Initial delay of the scheduled task to clean out stale packfile references.
++
+To reduce startup overhead, this should not be set to a very
+low value. The value is denoted in milliseconds.
++
+Default on JGit is 3600000 (1 hour).
+
+[[core.packedgitopenfilescachecleanperiod]]core.packedgitopenfilescachecleanperiod::
++
+Period of time between runs of scheduled task to clean out stale packfile
+references.
++
+The value is denoted in milliseconds.
++
+Default on JGit is 86400000 (1 day).
 
 [[core.streamFileThreshold]]core.streamFileThreshold::
 +

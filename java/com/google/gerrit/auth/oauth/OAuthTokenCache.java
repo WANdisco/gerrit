@@ -26,9 +26,11 @@ import com.google.gerrit.extensions.auth.oauth.OAuthTokenEncrypter;
 import com.google.gerrit.extensions.registration.DynamicItem;
 import com.google.gerrit.proto.Protos;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.cache.proto.Cache.OAuthTokenProto;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
 import com.google.gerrit.server.cache.serialize.IntegerCacheSerializer;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Singleton;
@@ -36,6 +38,8 @@ import com.google.inject.name.Named;
 
 @Singleton
 public class OAuthTokenCache {
+
+  @ReplicatedCache
   public static final String OAUTH_TOKENS = "oauth_tokens";
 
   private final DynamicItem<OAuthTokenEncrypter> encrypter;
@@ -103,9 +107,11 @@ public class OAuthTokenCache {
 
   @Inject
   OAuthTokenCache(
-      @Named(OAUTH_TOKENS) Cache<Account.Id, OAuthToken> cache,
-      DynamicItem<OAuthTokenEncrypter> encrypter) {
-    this.cache = cache;
+          @Named(OAUTH_TOKENS) Cache<Account.Id, OAuthToken> cache,
+          DynamicItem<OAuthTokenEncrypter> encrypter,
+          ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.cache = replicatedEventsCoordinator.createReplicatedCache(OAUTH_TOKENS,
+            cache, replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
     this.encrypter = encrypter;
   }
 

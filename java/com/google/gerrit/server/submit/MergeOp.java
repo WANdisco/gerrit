@@ -24,6 +24,9 @@ import com.github.rholder.retry.Attempt;
 import com.github.rholder.retry.RetryListener;
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Joiner;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -101,6 +104,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import com.wandisco.gerrit.gitms.shared.api.exceptions.GitUpdateException;
 import org.eclipse.jgit.errors.ConfigInvalidException;
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
 import org.eclipse.jgit.lib.Constants;
@@ -693,11 +698,27 @@ public class MergeOp implements AutoCloseable {
       //
       // If you happen across one of these, the correct fix is to convert the
       // inner IntegrationConflictException to a ResourceConflictException.
-      if (e.getCause() instanceof IntegrationConflictException) {
-        throw (IntegrationConflictException) e.getCause();
+      if (e.getCause() != null && !Strings.isNullOrEmpty(e.getCause().getMessage())) {
+        // GER 2090: Only do this if this is actually an IntegrationConflictException.
+        // There is the possibility that gitMS might be throwing something else...
+        if (e.getCause() instanceof IntegrationConflictException) {
+          throw (IntegrationConflictException) e.getCause();
+        } else if (containsGitUpdateException(e.getCause())) {
+          // And only throw the exception if this is a GitUpdateException.
+          // We don't want to wrap as a MergeUpdateException here as that is a RuntimeException, which will
+          // always cause a Retry, and we don't want that.
+          throw e;
+        }
       }
       throw new MergeUpdateException(genericMergeError(cs), e);
     }
+  }
+
+  private boolean containsGitUpdateException(Throwable cause) {
+    if (cause instanceof IOException) {
+      return cause.getCause() instanceof GitUpdateException;
+    }
+    return false;
   }
 
   public Set<Project.NameKey> getAllProjects() {

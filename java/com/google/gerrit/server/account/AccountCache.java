@@ -84,8 +84,6 @@ public interface AccountCache {
    * meta ref. The method does not populate {@link AccountState#defaultPreferences}.
    *
    * @param accountId ID of the account that should be retrieved.
-   * @param metaId the sha1 of commit in {@link com.google.gerrit.entities.RefNames#refsUsers} ref.
-   * @return {@code AccountState} instance for the given account ID at specific sha1 {@code metaId}.
    */
   @UsedAt(Project.GOOGLE)
   AccountState getFromMetaId(Account.Id accountId, ObjectId metaId);

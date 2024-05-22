@@ -1,0 +1,3 @@
+lfs_locks
+jira_server_project
+its_rules_project

@@ -404,7 +404,7 @@ public abstract class AbstractDaemonTest {
     initSsh();
   }
 
-  protected void reindexAccount(Account.Id accountId) {
+  protected void reindexAccount(Account.Id accountId) throws IOException {
     accountIndexer.index(accountId);
   }
 

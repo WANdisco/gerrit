@@ -124,6 +124,9 @@ public class BaseInit extends SiteProgram {
         } catch (StorageException e) {
           String msg = "Couldn't upgrade schema. Expected if slave and read-only database";
           System.err.println(msg);
+
+          // Log the real error here also, as its too early and we may not have even hooked in the logs directory yet.
+          System.err.println("Failed to upgrade, details: " + e.getMessage());
           logger.atSevere().withCause(e).log("%s", msg);
         }
 

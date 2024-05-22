@@ -6,6 +6,7 @@
 *.pyc
 *.sublime-*
 *.swp
+*.asc
 *~
 .DS_Store
 js-to-ts.sh
@@ -59,6 +60,9 @@ js-to-ts.sh
 !/plugins/webhooks
 /test_site
 /tools/format
+release.war
+target
+env\.properties
 /tools/maven/gerrit-*_pom.xml.asc
 /tools/node_tools
 /tools/polygerrit-updater
