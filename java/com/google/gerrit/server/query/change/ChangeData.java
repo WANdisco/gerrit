@@ -1201,8 +1201,6 @@ public class ChangeData {
         mergeable = true;
       } else if (c.isAbandoned()) {
         return null;
-      } else if (c.isWorkInProgress()) {
-        return null;
       } else {
         if (!lazyload()) {
           return null;

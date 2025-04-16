@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2008 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,7 +117,7 @@ public final class Change {
 
   /** The numeric change ID */
   @AutoValue
-  public abstract static class Id {
+  public abstract static class Id implements Comparable<Id> {
     /**
      * Parse a Change.Id out of a string representation.
      *
@@ -250,6 +263,15 @@ public final class Change {
         r.append('0');
       }
       return r.append(m).append('/').append(get()).append('/');
+    }
+
+    @Override
+    public final int compareTo(Id o) {
+      if (o == null) {
+        return 1;
+      } else {
+        return this.id() - o.id();
+      }
     }
 
     @Override

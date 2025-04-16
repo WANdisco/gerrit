@@ -26,6 +26,7 @@ import static java.util.stream.Collectors.joining;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableSet;
@@ -35,6 +36,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
+import com.google.common.collect.Table;
 import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.entities.Account;
 import com.google.gerrit.entities.AttentionSetUpdate;
@@ -401,9 +403,75 @@ public class ApprovalsUtil {
       RevWalk revWalk,
       Config repoConfig,
       ChangeUpdate changeUpdate) {
+    return copyApprovalsToNewPatchSet(notes, patchSet, revWalk, repoConfig, changeUpdate, false);
+  }
+
+  /**
+   * Copies approvals to a new patch set.
+   *
+   * <p>Computes the approvals of the prior patch set that should be copied to the new patch set and
+   * stores them in NoteDb.
+   *
+   * <p>For outdated approvals (approvals on the prior patch set which are outdated by the new patch
+   * set and hence not copied) the approvers are added to the attention set since they need to
+   * re-review the change and renew their approvals.
+   *
+   * @param notes the change notes
+   * @param patchSet the newly created patch set
+   * @param revWalk {@link RevWalk} that can see the new patch set revision
+   * @param repoConfig the repo config
+   * @param changeUpdate changeUpdate that is used to persist the copied approvals and update the
+   *     attention set
+   * @param checkApprovalLabelExistsAlready Checks to see if the label has already been applied to stop cyclic overwritting
+   *                                        ( only required from copy approvals ( not new patchset copying )
+   * @return the result of the approval copying
+   */
+  public ApprovalCopier.Result copyApprovalsToNewPatchSet(
+      ChangeNotes notes,
+      PatchSet patchSet,
+      RevWalk revWalk,
+      Config repoConfig,
+      ChangeUpdate changeUpdate,
+      boolean checkApprovalLabelExistsAlready ) {
     ApprovalCopier.Result approvalCopierResult =
         approvalCopier.forPatchSet(notes, patchSet, revWalk, repoConfig);
-    approvalCopierResult.copiedApprovals().forEach(a -> changeUpdate.putCopiedApproval(a));
+
+    // if we are using CopyApprovals entrypoint we need to ensure we haven't already
+    // applied the copied approval items that may have been created above.  Check before
+    // we add them to the list of putCopiedApproval to be executed.
+    // If not CopyApprovals ( so running inside the daemon ) we fallback
+    // to the vanilla behaviour which doesn't need to check - as its only executed on new patches.
+    if (checkApprovalLabelExistsAlready) {
+      Set<PatchSetApproval> current =
+          ImmutableSet.copyOf(notes.getApprovalsWithCopied().get(notes.getCurrentPatchSet().id()));
+      Iterable<PatchSetApproval> currentNormalized =
+          labelNormalizer.normalize(notes, current).getNormalized();
+      Set<PatchSetApproval> inferred = approvalCopierResult.copiedApprovals();
+
+      // Exempt granted timestamp from comparisson, otherwise, we would persist the copied
+      // labels every time this method is called.
+      Table<LabelId, Account.Id, Short> approvalTable = HashBasedTable.create();
+      for (PatchSetApproval psa : currentNormalized) {
+        Account.Id id = psa.accountId();
+        approvalTable.put(psa.labelId(), id, psa.value());
+      }
+
+      for (PatchSetApproval psa : inferred) {
+        if (psa.value() != 0) {
+          if (approvalTable.contains(psa.labelId(), psa.accountId())) {
+            Short v = approvalTable.get(psa.labelId(), psa.accountId());
+            if (v.shortValue() != psa.value()) {
+              changeUpdate.putCopiedApproval(psa);
+            }
+          } else {
+            changeUpdate.putCopiedApproval(psa);
+          }
+        }
+      }
+    } else {
+      // simply add each created approval to the list without checking.
+      approvalCopierResult.copiedApprovals().forEach(a -> changeUpdate.putCopiedApproval(a));
+    }
 
     if (!notes.getChange().isWorkInProgress()) {
       // The attention set should not be updated when the change is work-in-progress.

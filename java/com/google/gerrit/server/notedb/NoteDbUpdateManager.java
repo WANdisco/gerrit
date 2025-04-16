@@ -365,6 +365,46 @@ public class NoteDbUpdateManager implements AutoCloseable {
                 cu -> cu.getAttentionSetUpdates().stream()));
   }
 
+
+
+  private BatchRefUpdate prepare(OpenRepo or, boolean dryrun, @Nullable PushCertificate pushCert)
+      throws IOException {
+    if (or == null || or.cmds.isEmpty()) {
+      return null;
+    }
+    if (!dryrun) {
+      or.flush();
+    } else {
+      // OpenRepo buffers objects separately; caller may assume that objects are available in the
+      // inserter it previously passed via setChangeRepo.
+      or.flushToFinalInserter();
+    }
+
+    BatchRefUpdate bru = or.repo.getRefDatabase().newBatchUpdate();
+    bru.setPushCertificate(pushCert);
+    if (refLogMessage != null) {
+      bru.setRefLogMessage(refLogMessage, false);
+    } else {
+      bru.setRefLogMessage(
+          firstNonNull(NoteDbUtil.guessRestApiHandler(), "Update NoteDb refs"), false);
+    }
+    bru.setRefLogIdent(refLogIdent != null ? refLogIdent : serverIdent.get());
+    bru.setAtomic(true);
+    or.cmds.addTo(bru);
+    bru.setAllowNonFastForwards(true);
+    for (BatchUpdateListener listener : batchUpdateListeners) {
+      bru = listener.beforeUpdateRefs(bru);
+    }
+
+    return bru;
+  }
+
+  public BatchRefUpdate prepare() throws IOException {
+    checkNotExecuted();
+    stage();
+    return prepare(changeRepo, false, pushCert);
+  }
+
   private BatchRefUpdate execute(OpenRepo or, boolean dryrun, @Nullable PushCertificate pushCert)
       throws IOException {
     if (or == null || or.cmds.isEmpty()) {

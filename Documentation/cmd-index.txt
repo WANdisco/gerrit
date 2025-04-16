@@ -58,9 +58,6 @@ link:cmd-apropos.html[gerrit apropos]::
 link:cmd-ban-commit.html[gerrit ban-commit]::
 	Bans a commit from a project's repository.
 
-link:cmd-copy-approvals.html[gerrit copy-approvals]::
-	Copy all inferred approvals labels to the latest patch-set.
-
 link:cmd-check-project-access.html[gerrit check-project-access]::
 	Check if user(s) can read non-config refs of a project
 
@@ -162,6 +159,9 @@ link:cmd-logging-set-level.html[gerrit logging set-level]::
 
 link:cmd-ls-user-refs.html[gerrit ls-user-refs]::
 	Lists refs visible for a specified user.
+
+link:cmd-show-replicator-stats.html[gerrit show-replicator-stats]::
+	Display statistics from the WANdisco GitMS replicator.
 
 link:cmd-migrate-externalids-to-insensitive.html[gerrit migrate-externalids-to-insensitive]::
 	Migrate external-ids to case insensitive.

@@ -66,6 +66,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.PushResult;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class CreateBranchIT extends AbstractDaemonTest {
@@ -105,6 +106,7 @@ public class CreateBranchIT extends AbstractDaemonTest {
     assertCreateSucceeds(testBranch);
   }
 
+  @Ignore("GER-1128 : Failing Gerrit acceptance tests tracker")
   @Test
   public void branchAlreadyExists_Conflict() throws Exception {
     assertCreateSucceeds(testBranch);

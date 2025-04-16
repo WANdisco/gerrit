@@ -1,0 +1,5 @@
+---
+upgrade:
+  - Support upgrade of replicated GerritMS 1.11 (2.16) to GerritMS 1.12 (3.7)
+  - Upgrade will automatically run 'CopyApprovals' with no need to stop at 3.5
+  - Upgrade will automatically reconfigure GerritMS 1.12 to use Java 11 runtime

@@ -1,4 +1,4 @@
-load("//tools/bzl:maven_jar.bzl", "maven_jar")
+load("//tools/bzl:maven_jar.bzl", "MAVEN_LOCAL", "WANDISCO_ASSETS", "maven_jar")
 
 GUAVA_VERSION = "30.1-jre"
 
@@ -67,18 +67,18 @@ def declare_nongoogle_deps():
         sha1 = "cb2f351bf4463751201f43bb99865235d5ba07ca",
     )
 
-    SSHD_VERS = "2.9.2"
+    SSHD_VERS = "2.12.0"
 
     maven_jar(
         name = "sshd-osgi",
         artifact = "org.apache.sshd:sshd-osgi:" + SSHD_VERS,
-        sha1 = "bac0415734519b2fe433fea196017acf7ed32660",
+        sha1 = "32b8de1cbb722ba75bdf9898e0c41d42af00ce57",
     )
 
     maven_jar(
         name = "sshd-sftp",
         artifact = "org.apache.sshd:sshd-sftp:" + SSHD_VERS,
-        sha1 = "7f9089c87b3b44f19998252fd3b68637e3322920",
+        sha1 = "0f96f00a07b186ea62838a6a4122e8f4cad44df6",
     )
 
     maven_jar(
@@ -96,7 +96,7 @@ def declare_nongoogle_deps():
     maven_jar(
         name = "sshd-mina",
         artifact = "org.apache.sshd:sshd-mina:" + SSHD_VERS,
-        sha1 = "765dced3a2b4069bb0c550e18bda057bad8de26f",
+        sha1 = "8b202f7d4c0d7b714fd0c93a1352af52aa031149",
     )
 
     maven_jar(
@@ -126,8 +126,8 @@ def declare_nongoogle_deps():
 
     maven_jar(
         name = "commons-io",
-        artifact = "commons-io:commons-io:2.4",
-        sha1 = "b1b6ea3b7e4aa4f492509a4952029cd8e48019ad",
+        artifact = "commons-io:commons-io:2.11.0",
+        sha1 = "a2503f302b11ebde7ebc3df41daebe0e4eea3689",
     )
 
     # Google internal dependencies: these are developed at Google, so there is
@@ -145,6 +145,12 @@ def declare_nongoogle_deps():
         name = "flogger",
         artifact = "com.google.flogger:flogger:" + FLOGGER_VERS,
         sha1 = "cec29ed8b58413c2e935d86b12d6b696dc285419",
+    )
+
+    maven_jar(
+        name = "flogger-slf4j-backend",
+        artifact = "com.google.flogger:flogger-slf4j-backend:" + FLOGGER_VERS,
+        sha1 = "60ff0071653d079450d087c82dc4da396e401a6f",
     )
 
     maven_jar(
@@ -280,4 +286,60 @@ def declare_nongoogle_deps():
         name = "hamcrest",
         artifact = "org.hamcrest:hamcrest:2.2",
         sha1 = "1820c0968dba3a11a1b30669bb1f01978a91dedc",
+    )
+
+    # WANdisco replication dependencies:
+    #jackson-databind contains all appropriate classes we require in gerrit-gitms-interface
+    #such as ObjectMapper, JsonNode etc
+    _JACKSON_VERSION = "2.11.2"
+    maven_jar(
+        name = "jackson-core",
+        artifact = "com.fasterxml.jackson.core:jackson-core:" + _JACKSON_VERSION,
+    )
+
+    maven_jar(
+        name = "jackson-databind",
+        artifact = "com.fasterxml.jackson.core:jackson-databind:" + _JACKSON_VERSION,
+    )
+
+    #This is required by jackson databind ObjectMapper
+    maven_jar(
+        name = "jackson-annotations",
+        artifact = "com.fasterxml.jackson.core:jackson-annotations:" + _JACKSON_VERSION,
+    )
+
+    maven_jar(
+        name = "javax-activation",
+        artifact = "javax.activation:activation:1.1.1",
+        sha1 = "485de3a253e23f645037828c07f1d7f1af40763a",
+    )
+
+    maven_jar(
+        name = "equalsverifier",
+        artifact = "nl.jqno.equalsverifier:equalsverifier:1.3.1",
+        sha1 = "3c8d6837afa9de0290927582cdd904d8d355c66a",
+    )
+
+    maven_jar(
+        name = "javassist",
+        artifact = "org.javassist:javassist:3.29.1-GA",
+        sha1 = "8737971b43192ee1d61f056ae0a8c55f8d8df9e6",
+    )
+
+    maven_jar(
+        name = "reflections",
+        artifact = "org.reflections:reflections:0.9.11",
+        sha1 = "4c686033d918ec1727e329b7222fcb020152e32b",
+    )
+
+    # WANdisco maven assets
+    _GERRIT_GITMS_VERSION = "3.0.0.1"
+
+    # We don't use the sha1 below when we are in SNAPSHOT
+    # Comment sha1 back in for release versions
+    maven_jar(
+        name = "gerrit-gitms-shared",
+        artifact = "com.wandisco:gerrit-gitms-shared:" + _GERRIT_GITMS_VERSION,
+        repository = WANDISCO_ASSETS,
+        sha1 = "632c5626df837567c1dd17bd9ebf0a652363b397",
     )

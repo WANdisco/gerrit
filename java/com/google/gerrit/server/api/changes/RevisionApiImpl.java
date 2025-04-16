@@ -17,6 +17,7 @@ package com.google.gerrit.server.api.changes;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.gerrit.server.api.ApiUtil.asRestApiException;
 
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.MultimapBuilder.ListMultimapBuilder;
@@ -261,7 +262,7 @@ class RevisionApiImpl extends RevisionApi.NotImplemented {
     try {
       return review.apply(revision, in).value();
     } catch (Exception e) {
-      throw asRestApiException("Cannot post review", e);
+      throw asRestApiException("Cannot post review, conflict detected - please try again after a minute", e);
     }
   }
 
@@ -270,7 +271,9 @@ class RevisionApiImpl extends RevisionApi.NotImplemented {
     try {
       return submit.apply(revision, in).value();
     } catch (Exception e) {
-      throw asRestApiException("Cannot submit change", e);
+      Throwables.throwIfUnchecked(e);
+      Throwables.throwIfInstanceOf(e, RestApiException.class);
+      throw new Submit.SubmitException("Cannot submit change", e);
     }
   }
 

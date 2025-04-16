@@ -30,6 +30,8 @@ import com.google.gerrit.entities.Patch;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.extensions.client.DiffPreferencesInfo.Whitespace;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
@@ -82,6 +84,7 @@ import org.eclipse.jgit.revwalk.RevWalk;
 public class FileDiffCacheImpl implements FileDiffCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @SkipCacheReplication
   private static final String DIFF = "gerrit_file_diff";
 
   private final LoadingCache<FileDiffCacheKey, FileDiffOutput> cache;

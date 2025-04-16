@@ -32,29 +32,38 @@ import com.google.gerrit.server.cache.proto.Cache.AllExternalGroupsProto;
 import com.google.gerrit.server.cache.proto.Cache.AllExternalGroupsProto.ExternalGroupProto;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
 import com.google.gerrit.server.cache.serialize.StringCacheSerializer;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.group.db.Groups;
 import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
 import com.google.gerrit.server.query.group.InternalGroupQuery;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Named;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 
-/** Tracks group inclusions in memory for efficient access. */
+/**
+ * Tracks group inclusions in memory for efficient access.
+ */
 @Singleton
 public class GroupIncludeCacheImpl implements GroupIncludeCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @ReplicatedCache
   private static final String PARENT_GROUPS_NAME = "groups_bysubgroup";
+  @ReplicatedCache
   private static final String GROUPS_WITH_MEMBER_NAME = "groups_bymember";
+  @ReplicatedCache
   private static final String EXTERNAL_NAME = "groups_external";
+  @ReplicatedCache
   private static final String PERSISTED_EXTERNAL_NAME = "groups_external_persisted";
 
   public static Module module() {
@@ -62,15 +71,17 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
       @Override
       protected void configure() {
         cache(
-                GROUPS_WITH_MEMBER_NAME,
-                Account.Id.class,
-                new TypeLiteral<ImmutableSet<AccountGroup.UUID>>() {})
+            GROUPS_WITH_MEMBER_NAME,
+            Account.Id.class,
+            new TypeLiteral<ImmutableSet<AccountGroup.UUID>>() {
+            })
             .loader(GroupsWithMemberLoader.class);
 
         cache(
-                PARENT_GROUPS_NAME,
-                AccountGroup.UUID.class,
-                new TypeLiteral<ImmutableList<AccountGroup.UUID>>() {})
+            PARENT_GROUPS_NAME,
+            AccountGroup.UUID.class,
+            new TypeLiteral<ImmutableList<AccountGroup.UUID>>() {
+            })
             .loader(ParentGroupsLoader.class);
 
         /**
@@ -106,14 +117,18 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
 
   @Inject
   GroupIncludeCacheImpl(
-      @Named(GROUPS_WITH_MEMBER_NAME)
+          @Named(GROUPS_WITH_MEMBER_NAME)
           LoadingCache<Account.Id, ImmutableSet<AccountGroup.UUID>> groupsWithMember,
-      @Named(PARENT_GROUPS_NAME)
+          @Named(PARENT_GROUPS_NAME)
           LoadingCache<AccountGroup.UUID, ImmutableList<AccountGroup.UUID>> parentGroups,
-      @Named(EXTERNAL_NAME) LoadingCache<String, ImmutableList<AccountGroup.UUID>> external) {
-    this.groupsWithMember = groupsWithMember;
-    this.parentGroups = parentGroups;
-    this.external = external;
+          @Named(EXTERNAL_NAME) LoadingCache<String, ImmutableList<AccountGroup.UUID>> external,
+          ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.groupsWithMember = replicatedEventsCoordinator.createReplicatedLoadingCache(GROUPS_WITH_MEMBER_NAME, groupsWithMember,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
+    this.parentGroups = replicatedEventsCoordinator.createReplicatedLoadingCache(PARENT_GROUPS_NAME, parentGroups,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
+    this.external = replicatedEventsCoordinator.createReplicatedLoadingCache(EXTERNAL_NAME, external,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
   }
 
   @Override
@@ -224,8 +239,9 @@ public class GroupIncludeCacheImpl implements GroupIncludeCache {
     AllExternalInMemoryLoader(
         @Named(PERSISTED_EXTERNAL_NAME) Cache<String, ImmutableList<AccountGroup.UUID>> persisted,
         GroupsSnapshotReader snapshotReader,
-        Groups groups) {
-      this.persisted = persisted;
+        Groups groups, ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+      this.persisted = replicatedEventsCoordinator.createReplicatedCache(PERSISTED_EXTERNAL_NAME, persisted,
+              replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
       this.snapshotReader = snapshotReader;
       this.groups = groups;
     }

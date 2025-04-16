@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2014 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +40,7 @@ import com.google.gerrit.entities.LabelId;
 import com.google.gerrit.entities.LabelType;
 import com.google.gerrit.entities.Permission;
 import com.google.gerrit.entities.RefNames;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.server.GerritPersonIdent;
 import com.google.gerrit.server.config.AllUsersName;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
@@ -97,7 +111,7 @@ public class AllUsersCreator {
         initAllUsers(git);
         RefUpdate u = git.updateRef(Constants.HEAD);
         u.link(RefNames.REFS_CONFIG);
-      } catch (RepositoryNotFoundException err) {
+      } catch (RepositoryNotFoundException | PreconditionFailedException err) {
         String name = allUsersName.get();
         throw new IOException("Cannot create repository " + name, err);
       }

@@ -34,6 +34,7 @@ public class EventTypes {
     register(PatchSetCreatedEvent.TYPE, PatchSetCreatedEvent.class);
     register(PrivateStateChangedEvent.TYPE, PrivateStateChangedEvent.class);
     register(ProjectCreatedEvent.TYPE, ProjectCreatedEvent.class);
+    register(ProjectHeadUpdatedEvent.TYPE, ProjectHeadUpdatedEvent.class);
     register(RefReceivedEvent.TYPE, RefReceivedEvent.class);
     register(RefUpdatedEvent.TYPE, RefUpdatedEvent.class);
     register(ReviewerAddedEvent.TYPE, ReviewerAddedEvent.class);
@@ -51,6 +52,16 @@ public class EventTypes {
    */
   public static void register(String eventType, Class<? extends Event> eventClass) {
     typesByString.put(eventType, eventClass);
+  }
+
+
+  /**
+   * Unregister an event type
+   *
+   * @param eventType The event type to unregister.
+   */
+  public static void unregister(String eventType) {
+    typesByString.remove(eventType);
   }
 
   /**

@@ -28,11 +28,13 @@ import com.google.gerrit.server.ReviewerByEmailSet;
 import com.google.gerrit.server.ReviewerSet;
 import com.google.gerrit.server.account.externalids.ExternalIdCache;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.cache.proto.Cache.ChangeNotesKeyProto;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
 import com.google.gerrit.server.cache.serialize.ObjectIdConverter;
 import com.google.gerrit.server.notedb.AbstractChangeNotes.Args;
 import com.google.gerrit.server.notedb.ChangeNotesCommit.ChangeNotesRevWalk;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Singleton;
@@ -51,6 +53,7 @@ import org.eclipse.jgit.lib.ObjectId;
 public class ChangeNotesCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @ReplicatedCache
   @VisibleForTesting static final String CACHE_NAME = "change_notes";
 
   public static Module module() {
@@ -387,10 +390,10 @@ public class ChangeNotesCache {
 
   @Inject
   ChangeNotesCache(
-      @Named(CACHE_NAME) Cache<Key, ChangeNotesState> cache,
-      Args args,
-      ExternalIdCache externalIdCache) {
-    this.cache = cache;
+          @Named(CACHE_NAME) Cache<Key, ChangeNotesState> cache,
+          Args args,
+          ExternalIdCache externalIdCache, ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.cache = replicatedEventsCoordinator.createReplicatedCache(CACHE_NAME, cache, key -> key.project().get());
     this.args = args;
     this.externalIdCache = externalIdCache;
   }

@@ -26,6 +26,7 @@ import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.logging.Metadata;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import org.eclipse.jgit.lib.Config;
@@ -34,8 +35,11 @@ import org.eclipse.jgit.lib.Config;
 public class Sequences {
   private static final String SECTION_NOTEDB = "noteDb";
   private static final String KEY_SEQUENCE_BATCH_SIZE = "sequenceBatchSize";
+  private static final String SEQUENCE_RETRY_MAX_TIMEOUT_SECS = "sequenceRetryMaxTimeoutSecs";
   private static final int DEFAULT_ACCOUNTS_SEQUENCE_BATCH_SIZE = 1;
   private static final int DEFAULT_CHANGES_SEQUENCE_BATCH_SIZE = 20;
+  private static final int DEFAULT_GROUP_SEQUENCE_BATCH_SIZE = 1;
+  private static final int DEFAULT_SEQUENCE_RETRY_MAX_TIMEOUT_SECS = 30;
 
   public static final String NAME_ACCOUNTS = "accounts";
   public static final String NAME_GROUPS = "groups";
@@ -57,16 +61,20 @@ public class Sequences {
   private final Timer2<SequenceType, Boolean> nextIdLatency;
   private final int accountBatchSize;
   private final int changeBatchSize;
-  private final int groupBatchSize = 1;
+  private final int groupBatchSize;
 
   @Inject
   public Sequences(
       @GerritServerConfig Config cfg,
+      ReplicatedConfiguration replicatedConfiguration,
       GitRepositoryManager repoManager,
       GitReferenceUpdated gitRefUpdated,
       AllProjectsName allProjects,
       AllUsersName allUsers,
       MetricMaker metrics) {
+
+    int sequenceRetryMaxTimeoutSecs = cfg.getInt(SECTION_NOTEDB, SEQUENCE_RETRY_MAX_TIMEOUT_SECS, DEFAULT_SEQUENCE_RETRY_MAX_TIMEOUT_SECS);
+    RepoSequence.setSequenceRetryMaxTimeoutSecs(sequenceRetryMaxTimeoutSecs);
 
     accountBatchSize =
         cfg.getInt(
@@ -76,6 +84,7 @@ public class Sequences {
             DEFAULT_ACCOUNTS_SEQUENCE_BATCH_SIZE);
     accountSeq =
         new RepoSequence(
+            replicatedConfiguration,
             repoManager,
             gitRefUpdated,
             allUsers,
@@ -91,6 +100,7 @@ public class Sequences {
             DEFAULT_CHANGES_SEQUENCE_BATCH_SIZE);
     changeSeq =
         new RepoSequence(
+            replicatedConfiguration,
             repoManager,
             gitRefUpdated,
             allProjects,
@@ -98,8 +108,15 @@ public class Sequences {
             () -> FIRST_CHANGE_ID,
             changeBatchSize);
 
+    groupBatchSize =
+        cfg.getInt(
+            SECTION_NOTEDB,
+            NAME_GROUPS,
+            KEY_SEQUENCE_BATCH_SIZE,
+            DEFAULT_GROUP_SEQUENCE_BATCH_SIZE);
     groupSeq =
         new RepoSequence(
+            replicatedConfiguration,
             repoManager,
             gitRefUpdated,
             allUsers,

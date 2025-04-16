@@ -31,6 +31,8 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.transport.ReceiveCommand;
 
+import java.util.StringJoiner;
+
 /** Helper class to fire an event when a Git reference has been updated. */
 @Singleton
 public class GitReferenceUpdated {
@@ -221,7 +223,12 @@ public class GitReferenceUpdated {
 
     @Override
     public String toString() {
-      return String.format("{%s: %s -> %s}", ref, oldObjectId, newObjectId);
+      return new StringJoiner(", ", UpdatedRef.class.getSimpleName() + "[", "]")
+          .add("ref='" + ref + "'")
+          .add("oldObjectId='" + oldObjectId + "'")
+          .add("newObjectId='" + newObjectId + "'")
+          .add("type=" + type)
+          .toString();
     }
   }
 
@@ -264,7 +271,11 @@ public class GitReferenceUpdated {
 
     @Override
     public String toString() {
-      return String.format("%s[%s,%s]", getClass().getSimpleName(), projectName, updatedRefs);
+      return new StringJoiner(", ", GitBatchRefUpdateEvent.class.getSimpleName() + "[", "]")
+          .add("projectName='" + projectName + "'")
+          .add("updatedRefs=" + updatedRefs)
+          .add("updater=" + updater)
+          .toString();
     }
 
     @Override
@@ -331,6 +342,15 @@ public class GitReferenceUpdated {
     @Override
     public AccountInfo getUpdater() {
       return updater;
+    }
+
+    @Override
+    public String toString() {
+      return new StringJoiner(", ", GitReferenceUpdatedEvent.class.getSimpleName() + "[", "]")
+          .add("projectName='" + projectName + "'")
+          .add("updatedRef=" + updatedRef)
+          .add("updater=" + updater)
+          .toString();
     }
   }
 }

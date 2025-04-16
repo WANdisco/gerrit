@@ -20,6 +20,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.inject.Inject;
 import com.google.inject.Module;
@@ -32,9 +33,11 @@ import org.eclipse.jgit.lib.Config;
 /** Provides a cached list of {@link PatchListEntry}. */
 @Singleton
 public class PatchListCacheImpl implements PatchListCache {
-  public static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  public static final FluentLogger logger = FluentLogger.forEnclosingClass();
+  @SkipCacheReplication
   static final String INTRA_NAME = "diff_intraline";
+  @SkipCacheReplication
   static final String DIFF_SUMMARY = "diff_summary";
 
   public static Module module() {

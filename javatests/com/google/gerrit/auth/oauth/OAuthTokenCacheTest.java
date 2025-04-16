@@ -25,6 +25,7 @@ import com.google.gerrit.proto.testing.SerializedClassSubject;
 import com.google.gerrit.server.cache.proto.Cache.OAuthTokenProto;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
 import java.lang.reflect.Type;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

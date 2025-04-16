@@ -60,6 +60,7 @@ import com.google.gerrit.pgm.Init;
 import com.google.gerrit.server.config.GerritRuntime;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.config.SitePath;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
 import com.google.gerrit.server.experiments.ConfigExperimentFeatures.ConfigExperimentFeaturesModule;
 import com.google.gerrit.server.git.receive.AsyncReceiveCommits.AsyncReceiveCommitsModule;
 import com.google.gerrit.server.git.validators.CommitValidationListener;
@@ -332,7 +333,7 @@ public class GerritServer implements AutoCloseable {
     String configuredIndexBackend = cfg.getString("index", null, "type");
     if (configuredIndexBackend == null) {
       // Propagate index type to pgms that run off of the gerrit.config file on local disk.
-      IndexType indexType = IndexType.fromEnvironment().orElse(new IndexType("fake"));
+      IndexType indexType = IndexType.fromEnvironment().orElseGet(() -> new IndexType("fake"));
       gerritConfig.setString("index", null, "type", indexType.isLucene() ? "lucene" : "fake");
     }
     gerritConfig.save();
@@ -509,7 +510,7 @@ public class GerritServer implements AutoCloseable {
     IndexType indexType =
         (configuredIndexBackend != null)
             ? new IndexType(configuredIndexBackend)
-            : IndexType.fromEnvironment().orElse(new IndexType("fake"));
+            : IndexType.fromEnvironment().orElseGet(() -> new IndexType("fake"));
     daemon.setIndexModule(createIndexModule(indexType, baseConfig, testIndexModule));
 
     daemon.setEnableHttpd(desc.httpd());
@@ -525,7 +526,7 @@ public class GerritServer implements AutoCloseable {
             },
             new ConfigExperimentFeaturesModule()));
     daemon.addAdditionalSysModuleForTesting(
-        new ReindexProjectsAtStartupModule(), new ReindexGroupsAtStartupModule());
+        new ReindexProjectsAtStartupModule(), new ReindexGroupsAtStartupModule(), new NonReplicatedCoordinatorModule());
     daemon.start();
     return new GerritServer(desc, null, createTestInjector(daemon), daemon, null);
   }
@@ -768,6 +769,10 @@ public class GerritServer implements AutoCloseable {
     return MoreObjects.toStringHelper(this).addValue(desc).toString();
   }
 
+  /* N.B: This property relates to Vanilla Gerrit's notion of a replica
+   * and has no relation to Cirata replication. See 'Replica' in
+   * Documentation/glossary.txt for an explanation.
+   */
   public boolean isReplica() {
     return daemon.isReplica();
   }

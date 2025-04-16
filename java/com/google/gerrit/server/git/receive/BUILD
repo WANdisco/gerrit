@@ -28,9 +28,11 @@ java_library(
         "//lib:jgit",
         "//lib/auto:auto-value",
         "//lib/auto:auto-value-annotations",
+        "//lib/commons:lang3",
         "//lib/flogger:api",
         "//lib/guice",
         "//lib/guice:guice-assistedinject",
+         "//lib/wandisco:gerrit-gitms-shared"
     ],
 )
 

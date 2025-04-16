@@ -12,5 +12,6 @@ junit_tests(
         "//lib:gson",
         "//lib:guava",
         "//lib/truth",
+        "//lib/reflections",
     ],
 )

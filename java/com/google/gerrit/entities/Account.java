@@ -22,6 +22,10 @@ import com.google.auto.value.AutoValue;
 import com.google.common.primitives.Ints;
 import com.google.gerrit.common.Nullable;
 import com.google.gerrit.extensions.client.DiffPreferencesInfo;
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
+
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -56,7 +60,7 @@ public abstract class Account {
 
   /** Key local to Gerrit to identify a user. */
   @AutoValue
-  public abstract static class Id implements Comparable<Id> {
+  public abstract static class Id implements Serializable, Comparable<Id> {
     /** Parse an Account.Id out of a string representation. */
     public static Optional<Id> tryParse(String str) {
       return Optional.ofNullable(Ints.tryParse(str)).map(Account::id);
@@ -121,6 +125,10 @@ public abstract class Account {
     @Override
     public final String toString() {
       return Integer.toString(get());
+    }
+
+    public static TypeAdapter<Id> typeAdapter(Gson gson) {
+      return new AutoValue_Account_Id.GsonTypeAdapter(gson);
     }
   }
 

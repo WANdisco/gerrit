@@ -17,6 +17,7 @@ package com.google.gerrit.server.restapi.project;
 import static com.google.gerrit.server.git.QueueProvider.QueueType.BATCH;
 
 import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.common.data.GlobalCapability;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.extensions.annotations.RequiresCapability;
@@ -30,11 +31,15 @@ import com.google.gerrit.server.project.ProjectResource;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
+
+import java.io.IOException;
 import java.util.concurrent.Future;
 
 @RequiresCapability(GlobalCapability.MAINTAIN_SERVER)
 @Singleton
 public class Index implements RestModifyView<ProjectResource, IndexProjectInput> {
+  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
   private final ProjectIndexer indexer;
   private final ListeningExecutorService executor;
   private final Provider<ListChildProjects> listChildProjectsProvider;
@@ -65,10 +70,17 @@ public class Index implements RestModifyView<ProjectResource, IndexProjectInput>
     return Response.accepted(response);
   }
 
-  private void reindex(Project.NameKey project, Boolean async) {
+  private void reindex(Project.NameKey project, Boolean async) throws IOException {
     if (Boolean.TRUE.equals(async)) {
       @SuppressWarnings("unused")
-      Future<?> possiblyIgnoredError = executor.submit(() -> indexer.index(project));
+      Future<?> possiblyIgnoredError = executor.submit(() -> {
+        try {
+          indexer.index(project);
+        } catch (IOException e) {
+          // Logging and squashing this exception as it can't be thrown out of the lambda.
+          logger.atWarning().log("Encountered error reindexing project asynchronously: %s", project);
+        }
+      });
     } else {
       indexer.index(project);
     }

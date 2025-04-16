@@ -30,6 +30,7 @@ import com.google.gerrit.entities.Project;
 import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.extensions.events.NewProjectCreatedListener;
 import com.google.gerrit.extensions.restapi.BadRequestException;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
 import com.google.gerrit.git.LockFailureException;
 import com.google.gerrit.server.GerritPersonIdent;
@@ -48,6 +49,7 @@ import com.google.inject.Provider;
 import java.io.IOException;
 import java.util.List;
 import org.eclipse.jgit.errors.ConfigInvalidException;
+import org.eclipse.jgit.errors.RepositoryDeploymentException;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.lib.CommitBuilder;
 import org.eclipse.jgit.lib.Constants;
@@ -135,6 +137,10 @@ public class ProjectCreator {
           e);
     } catch (RepositoryNotFoundException badName) {
       throw new BadRequestException("invalid project name: " + nameKey, badName);
+    } catch (RepositoryDeploymentException e){
+      throw new BadRequestException(String.format("Could not create repository %s, %s", nameKey, e.getMessage()));
+    } catch (PreconditionFailedException e) {
+      throw new BadRequestException("Create project request failed precondition: " + e.getMessage());
     }
   }
 

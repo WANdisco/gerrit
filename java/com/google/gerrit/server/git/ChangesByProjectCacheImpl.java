@@ -24,6 +24,7 @@ import com.google.gerrit.entities.Change;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.server.ReviewerSet;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.git.ChangesByProjectCache.UseIndex;
 import com.google.gerrit.server.index.change.ChangeField;
 import com.google.gerrit.server.logging.Metadata;
@@ -58,6 +59,7 @@ import org.eclipse.jgit.lib.Repository;
 public class ChangesByProjectCacheImpl implements ChangesByProjectCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @SkipCacheReplication
   private static final String CACHE_NAME = "changes_by_project";
 
   public static class Module extends CacheModule {

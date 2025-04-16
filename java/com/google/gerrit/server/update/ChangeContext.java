@@ -21,6 +21,8 @@ import com.google.gerrit.entities.PatchSet;
 import com.google.gerrit.server.notedb.ChangeNotes;
 import com.google.gerrit.server.notedb.ChangeUpdate;
 
+import java.time.Instant;
+
 /**
  * Context for performing the {@link BatchUpdateOp#updateChange} phase.
  *
@@ -41,6 +43,15 @@ public interface ChangeContext extends Context {
    * @return handle for change updates.
    */
   ChangeUpdate getUpdate(PatchSet.Id psId);
+
+  /**
+   * Same as {@link ChangeContext#getUpdate}, but allows to override the commit timestamp.
+   *
+   * @param psId patch set ID.
+   * @param whenOverride commit timestamp.
+   * @return handle for change updates.
+   */
+  ChangeUpdate getUpdate(PatchSet.Id psId, Instant whenOverride);
 
   /**
    * Gets a new ChangeUpdate for this change at a given patch set.

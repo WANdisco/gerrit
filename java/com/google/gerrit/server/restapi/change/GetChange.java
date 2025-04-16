@@ -22,6 +22,7 @@ import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.extensions.client.ListChangesOption;
 import com.google.gerrit.extensions.client.ListOption;
 import com.google.gerrit.extensions.common.ChangeInfo;
+import com.google.gerrit.extensions.restapi.Cacheability;
 import com.google.gerrit.extensions.common.PluginDefinedInfo;
 import com.google.gerrit.extensions.registration.DynamicSet;
 import com.google.gerrit.extensions.restapi.BadRequestException;
@@ -55,6 +56,7 @@ import org.kohsuke.args4j.Option;
 
 public class GetChange
     implements RestReadView<ChangeResource>,
+        Cacheability,
         DynamicOptions.BeanReceiver,
         DynamicOptions.BeanProvider {
   private final ChangeJson.Factory json;
@@ -172,5 +174,10 @@ public class GetChange
 
     throw new PreconditionFailedException(
         id.getName() + " not reachable from " + changeMetaRefName);
+  }
+
+  @Override
+  public boolean isCacheable() {
+    return true;
   }
 }

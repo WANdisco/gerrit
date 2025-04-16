@@ -1,0 +1,3 @@
+---
+features:
+  - Continued support of "CopyApprovals" entrypoint to allow recursive approval migration

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2009 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +31,16 @@ import com.google.gerrit.common.FileUtil;
 import com.google.gerrit.extensions.events.LifecycleListener;
 import com.google.gerrit.server.config.SitePaths;
 import com.google.gerrit.server.util.SystemLog;
+
+import java.io.File;
+import java.io.FileInputStream;
 import com.google.gerrit.util.logging.LogTimestampFormatter;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
 import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
@@ -31,6 +51,7 @@ import org.eclipse.jgit.lib.Config;
 public class ErrorLogFile {
   static final String LOG_NAME = "error_log";
   static final String JSON_SUFFIX = ".json";
+  static final Logger logger = Logger.getLogger(ErrorLogFile.class);
 
   public static void errorOnlyConsole() {
     LogManager.resetConfiguration();
@@ -47,6 +68,7 @@ public class ErrorLogFile {
     Logger root = LogManager.getRootLogger();
     root.removeAllAppenders();
     root.addAppender(dst);
+    root.setLevel(Level.INFO);
   }
 
   public static LifecycleListener start(Path sitePath, Config config, boolean consoleLog)
@@ -55,6 +77,7 @@ public class ErrorLogFile {
         FileUtil.mkdirsOrDie(new SitePaths(sitePath).logs_dir, "Cannot create log directory");
     if (SystemLog.shouldConfigure()) {
       initLogSystem(logdir, config, consoleLog);
+      initWandiscoLogging(sitePath);
     }
 
     return new LifecycleListener() {
@@ -89,15 +112,57 @@ public class ErrorLogFile {
     boolean json = config.getBoolean("log", "jsonLogging", false);
     boolean text = config.getBoolean("log", "textLogging", true) || !(json || consoleLog);
     boolean rotate = config.getBoolean("log", "rotate", true);
+    final PatternLayout pattern = new PatternLayout("[%d] [%t] %-5p %c %x: %m%n");
 
     if (text) {
-      root.addAppender(SystemLog.createAppender(logdir, LOG_NAME, errorLogLayout, rotate));
+      root.addAppender(
+          SystemLog.createAppender(
+              logdir, LOG_NAME, pattern, rotate));
+      final ConsoleAppender stdout = new ConsoleAppender();
+      stdout.setLayout(pattern);
+      stdout.setTarget("System.out");
+      stdout.setThreshold(Level.INFO);
+      stdout.activateOptions();
+      LogManager.getRootLogger().addAppender(stdout);
     }
 
     if (json) {
       root.addAppender(
           SystemLog.createAppender(
               logdir, LOG_NAME + JSON_SUFFIX, new ErrorLogJsonLayout(), rotate));
+    }
+  }
+
+  private static void initWandiscoLogging(final Path sitePath) {
+    // build up the list of all the values in the file
+    Properties prop = new Properties();
+    try{
+      File wdLogging = Paths.get(sitePath.toFile().getAbsolutePath(),"/etc/wd_logging.properties").toFile();
+      if(!wdLogging.exists()){
+        logger.info("Cannot find wd_logging.properties skipping");
+        return;
+      }
+      try ( FileInputStream stream = new FileInputStream(wdLogging)){
+        prop.load(stream);
+
+        Iterator<Map.Entry<Object, Object>> iter = prop.entrySet().iterator();
+        Map.Entry entry;
+
+        while(iter.hasNext()){
+          entry = iter.next();
+          String className = entry.getKey().toString();
+          String logLevelVal = entry.getValue().toString();
+          Level logLevel = Level.toLevel(logLevelVal, Level.INFO);
+
+          LogManager.getLogger(className).setLevel(logLevel);
+        }
+        logger.info("Started WANdisco Logging");
+      }catch (IOException e){
+        logger.warn("Something went wrong \n"+e.getMessage());
+      }
+    }
+    catch (NullPointerException e){
+      logger.error("Something went wrong  \n"+e.getMessage());
     }
   }
 }

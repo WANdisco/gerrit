@@ -6,6 +6,8 @@ java_library(
     visibility = [
         "//lib:__pkg__",
         "//plugins:__pkg__",
+        "//java/com/google/gerrit/server:__pkg__",
+        "//gerrit-console-api:__pkg__"
     ],
     exports = ["@log-api//jar"],
 )

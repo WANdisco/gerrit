@@ -794,7 +794,7 @@ public class ChangeEditModifier {
         if (res == RefUpdate.Result.LOCK_FAILURE) {
           throw new LockFailureException(message, ru);
         }
-        if (res != RefUpdate.Result.NEW && res != RefUpdate.Result.FORCED) {
+        if (res != RefUpdate.Result.NEW && res != RefUpdate.Result.FORCED && res != RefUpdate.Result.FAST_FORWARD) {
           throw new IOException(message);
         }
         gitRefUpdated.fire(projectName, ru, userAccountState);
@@ -855,11 +855,11 @@ public class ChangeEditModifier {
       return user.newRefLogIdent(timestamp, zoneId);
     }
 
-    private void reindex(Change change) {
+    private void reindex(Change change) throws IOException {
       indexer.index(change.getProject(), change.getId());
     }
 
-    private void reindex(ChangeNotes notes) {
+    private void reindex(ChangeNotes notes) throws IOException {
       indexer.index(notes);
     }
   }

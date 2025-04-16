@@ -17,6 +17,8 @@ package com.google.gerrit.server.account.externalids;
 import com.google.common.cache.Cache;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
+import com.google.gerrit.server.cache.ReplicatedCache;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.entities.Account;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
@@ -31,6 +33,8 @@ import org.eclipse.jgit.lib.ObjectId;
 /** Caches external IDs of all accounts. The external IDs are always loaded from NoteDb. */
 @Singleton
 class ExternalIdCacheImpl implements ExternalIdCache {
+
+  @ReplicatedCache
   public static final String CACHE_NAME = "external_ids_map";
 
   private final Cache<ObjectId, AllExternalIds> extIdsByAccount;
@@ -42,13 +46,18 @@ class ExternalIdCacheImpl implements ExternalIdCache {
   ExternalIdCacheImpl(
       @Named(CACHE_NAME) Cache<ObjectId, AllExternalIds> extIdsByAccount,
       ExternalIdReader externalIdReader,
-      ExternalIdCacheLoader externalIdCacheLoader) {
-    this.extIdsByAccount = extIdsByAccount;
+      ExternalIdCacheLoader externalIdCacheLoader,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.extIdsByAccount = replicatedEventsCoordinator.createReplicatedCache(CACHE_NAME, extIdsByAccount,
+                    replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName());
     this.externalIdReader = externalIdReader;
     this.externalIdCacheLoader = externalIdCacheLoader;
     this.lock = new ReentrantLock(true /* fair */);
   }
 
+
+  // TODO: (trevorg) GER-944 consider is ths onReplace doing any deletions that we need to convey a eviction?
+  //  Is it an update, picked up via our listener already, or is it being ignored leading to stale data in remote index.?
   @Override
   public Optional<ExternalId> byKey(ExternalId.Key key) throws IOException {
     return Optional.ofNullable(get().byKey().get(key));

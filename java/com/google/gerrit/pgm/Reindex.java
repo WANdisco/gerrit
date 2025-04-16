@@ -29,6 +29,8 @@ import com.google.gerrit.index.SiteIndexer;
 import com.google.gerrit.lifecycle.LifecycleManager;
 import com.google.gerrit.lucene.LuceneIndexModule;
 import com.google.gerrit.pgm.util.BatchProgramModule;
+import com.google.gerrit.server.replication.configuration.ConfigurationHelper;
+import com.google.gerrit.server.util.GuiceUtils;
 import com.google.gerrit.pgm.util.SiteProgram;
 import com.google.gerrit.server.LibModuleLoader;
 import com.google.gerrit.server.ModuleOverloader;
@@ -42,6 +44,8 @@ import com.google.gerrit.server.index.options.AutoFlush;
 import com.google.gerrit.server.index.options.BuildBloomFilter;
 import com.google.gerrit.server.index.options.IsFirstInsertForEntry;
 import com.google.gerrit.server.plugins.PluginGuiceEnvironment;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
 import com.google.gerrit.server.util.ReplicaUtil;
 import com.google.inject.AbstractModule;
 import com.google.inject.Inject;
@@ -112,6 +116,9 @@ public class Reindex extends SiteProgram {
     dbManager.add(dbInjector);
     dbManager.start();
 
+    // GER-1889: We cannot allow the plugin environment to copy instance information when in a shared context.
+    PluginGuiceEnvironment.setAllowCopyOfReplicatedCoordinatorInstance(false);
+    
     sysInjector = createSysInjector();
     sysInjector.getInstance(PluginGuiceEnvironment.class).setDbCfgInjector(dbInjector, cfgInjector);
     LifecycleManager sysManager = new LifecycleManager();
@@ -214,6 +221,12 @@ public class Reindex extends SiteProgram {
           }
         });
     modules.add(new BatchProgramModule(dbInjector));
+
+    // if replicatedConfiguration was ever true, then we would need to bind a real ReplicatedEventsCoordinatorImpl
+    if (!GuiceUtils.hasBinding(dbInjector, ReplicatedEventsCoordinator.class)) {
+      modules.add(new NonReplicatedCoordinatorModule());
+    }
+
     modules.add(
         new FactoryModule() {
           @Override
@@ -227,18 +240,32 @@ public class Reindex extends SiteProgram {
             modules, LibModuleLoader.loadReindexModules(cfgInjector, versions, threads, replica)));
   }
 
+  /**
+   * Override the default product behaviour if not gerrit.config values are explicitly set.
+   */
   private void overrideConfig() {
-    // Disable auto-commit for speed; committing will happen at the end of the process.
+    // Disable auto-commit for speed; committing will happen at the end of the process
+    // GER-2273: Only set the override behaviour if the gerrit configuration doesn't have a value specified.
+    // this allows us to change product default behaviour, but still allow an admin to control the values
+    // by changing gerrit.config.
     if (IndexModule.getIndexType(dbInjector).isLucene()) {
-      globalConfig.setLong("index", "changes_open", "commitWithin", -1);
-      globalConfig.setLong("index", "changes_closed", "commitWithin", -1);
+      if (!ConfigurationHelper.checkValueExists(globalConfig, "index", "changes_open", "commitWithin")) {
+        globalConfig.setLong("index", "changes_open", "commitWithin", -1);
+      }
+      if (!ConfigurationHelper.checkValueExists(globalConfig,"index", "changes_closed", "commitWithin")) {
+        globalConfig.setLong("index", "changes_closed", "commitWithin", -1);
+      }
     }
 
-    // Disable change cache.
-    globalConfig.setLong("cache", "changes", "maximumWeight", 0);
+    if (!ConfigurationHelper.checkValueExists(globalConfig, "cache", "changes", "maximumWeight")) {
+      // Disable change cache.
+      globalConfig.setLong("cache", "changes", "maximumWeight", 0);
+    }
 
-    // Disable auto-reindexing if stale, since there are no concurrent writes to race with.
-    globalConfig.setBoolean("index", null, "autoReindexIfStale", false);
+    if (!ConfigurationHelper.checkValueExists(globalConfig, "index", null, "autoReindexIfStale")) {
+      // Disable auto-reindexing if stale, since there are no concurrent writes to race with.
+      globalConfig.setBoolean("index", null, "autoReindexIfStale", false);
+    }
   }
 
   private <K, V, I extends Index<K, V>> boolean reindex(IndexDefinition<K, V, I> def) {

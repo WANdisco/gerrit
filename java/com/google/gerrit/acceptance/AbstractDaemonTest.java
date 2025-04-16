@@ -404,7 +404,7 @@ public abstract class AbstractDaemonTest {
     initSsh();
   }
 
-  protected void reindexAccount(Account.Id accountId) {
+  protected void reindexAccount(Account.Id accountId) throws IOException {
     accountIndexer.index(accountId);
   }
 
@@ -1543,6 +1543,7 @@ public abstract class AbstractDaemonTest {
     configLabel(project, label, func, ImmutableList.of(), value);
   }
 
+  @SuppressWarnings("deprecation")
   private void configLabel(
       Project.NameKey project,
       String label,

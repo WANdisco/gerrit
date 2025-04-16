@@ -394,6 +394,10 @@ public class ChangeNotes extends AbstractChangeNotes<ChangeNotes> {
   // ChangeNotesCache from handlers.
   private ImmutableSortedMap<PatchSet.Id, PatchSet> patchSets;
   private PatchSetApprovals approvals;
+
+  // Used by testing only currently.
+  private ImmutableListMultimap<PatchSet.Id, PatchSetApproval> approvalsWithCopied;
+
   private ImmutableSet<Comment.Key> commentKeys;
 
   public ChangeNotes(
@@ -443,6 +447,19 @@ public class ChangeNotes extends AbstractChangeNotes<ChangeNotes> {
     return approvals;
   }
 
+  /**
+   * This method is currently used only in tests. TODO(paiking): Use this method to fetch approvals
+   * (including copied approvals) instead of computing copied approvals on demand. This will be used
+   * by {@code ApprovalCache}.
+   *
+   * @return all approvals, including copied approvals.
+   */
+  public ImmutableListMultimap<PatchSet.Id, PatchSetApproval> getApprovalsWithCopied() {
+    if (approvalsWithCopied == null) {
+      approvalsWithCopied = ImmutableListMultimap.copyOf(state.approvals());
+    }
+    return approvalsWithCopied;
+  }
   public ReviewerSet getReviewers() {
     return state.reviewers();
   }

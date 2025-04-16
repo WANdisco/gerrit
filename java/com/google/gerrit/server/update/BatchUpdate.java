@@ -73,6 +73,7 @@ import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.assistedinject.Assisted;
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -325,6 +326,15 @@ public class BatchUpdate implements AutoCloseable {
       }
       return u;
     }
+    @Override
+    public ChangeUpdate getUpdate(PatchSet.Id psId, Instant whenOverride) {
+      ChangeUpdate u = defaultUpdates.get(psId);
+      if (u == null) {
+        u = getNewChangeUpdate(psId, whenOverride);
+        defaultUpdates.put(psId, u);
+      }
+      return u;
+    }
 
     @Override
     public ChangeUpdate getDistinctUpdate(PatchSet.Id psId) {
@@ -335,6 +345,15 @@ public class BatchUpdate implements AutoCloseable {
 
     private ChangeUpdate getNewChangeUpdate(PatchSet.Id psId) {
       ChangeUpdate u = changeUpdateFactory.create(notes, user, when);
+      if (newChanges.containsKey(notes.getChangeId())) {
+        u.setAllowWriteToNewRef(true);
+      }
+      u.setPatchSetId(psId);
+      return u;
+    }
+
+    private ChangeUpdate getNewChangeUpdate(PatchSet.Id psId, Instant whenOverride) {
+      ChangeUpdate u = changeUpdateFactory.create(notes, user, whenOverride);
       if (newChanges.containsKey(notes.getChangeId())) {
         u.setAllowWriteToNewRef(true);
       }
@@ -451,6 +470,11 @@ public class BatchUpdate implements AutoCloseable {
 
   public void execute() throws UpdateException, RestApiException {
     execute(ImmutableList.of(this), ImmutableList.of(), false);
+  }
+
+  public BatchRefUpdate prepareRefUpdates() throws Exception {
+    ChangesHandle handle = executeChangeOps(ImmutableList.of(), false);
+    return handle.prepare();
   }
 
   public boolean isExecuted() {
@@ -638,7 +662,9 @@ public class BatchUpdate implements AutoCloseable {
       ChangeResult old = results.putIfAbsent(id, result);
       checkArgument(old == null, "result for change %s already set: %s", id, old);
     }
-
+    public BatchRefUpdate prepare() throws IOException {
+      return manager.prepare();
+    }
     void execute() throws IOException {
       BatchUpdate.this.batchRefUpdate = manager.execute(dryrun);
       BatchUpdate.this.executed = manager.isExecuted();
@@ -669,7 +695,7 @@ public class BatchUpdate implements AutoCloseable {
             indexFutures.add(indexer.indexAsync(project, id));
             break;
           case DELETED:
-            indexFutures.add(indexer.deleteAsync(id));
+            indexFutures.add(indexer.deleteAsync(project, id));
             break;
           case SKIPPED:
             break;

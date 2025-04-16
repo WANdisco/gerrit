@@ -28,9 +28,12 @@ import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
 import com.google.gerrit.server.plugincontext.PluginSetContext;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.inject.Provider;
 import com.google.inject.assistedinject.Assisted;
 import com.google.inject.assistedinject.AssistedInject;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
@@ -51,6 +54,8 @@ public class GroupIndexerImpl implements GroupIndexer {
   private final GroupCache groupCache;
   private final PluginSetContext<GroupIndexedListener> indexedListener;
   private final StalenessChecker stalenessChecker;
+  private final Provider<ReplicatedEventsCoordinator> providedEventsCoordinator;
+  private ReplicatedEventsCoordinator replicatedEventsCoordinator;
   @Nullable private final GroupIndexCollection indexes;
   @Nullable private final GroupIndex index;
 
@@ -59,12 +64,14 @@ public class GroupIndexerImpl implements GroupIndexer {
       GroupCache groupCache,
       PluginSetContext<GroupIndexedListener> indexedListener,
       StalenessChecker stalenessChecker,
-      @Assisted GroupIndexCollection indexes) {
+      @Assisted GroupIndexCollection indexes,
+      Provider<ReplicatedEventsCoordinator> providedEventsCoordinator) {
     this.groupCache = groupCache;
     this.indexedListener = indexedListener;
     this.stalenessChecker = stalenessChecker;
     this.indexes = indexes;
     this.index = null;
+    this.providedEventsCoordinator = providedEventsCoordinator;
   }
 
   @AssistedInject
@@ -72,18 +79,51 @@ public class GroupIndexerImpl implements GroupIndexer {
       GroupCache groupCache,
       PluginSetContext<GroupIndexedListener> indexedListener,
       StalenessChecker stalenessChecker,
-      @Assisted @Nullable GroupIndex index) {
+      @Assisted @Nullable GroupIndex index,
+      Provider<ReplicatedEventsCoordinator> providedEventsCoordinator) {
     this.groupCache = groupCache;
     this.indexedListener = indexedListener;
     this.stalenessChecker = stalenessChecker;
     this.indexes = null;
     this.index = index;
+    this.providedEventsCoordinator = providedEventsCoordinator;
   }
 
+
+  public ReplicatedEventsCoordinator getProvidedEventsCoordinator(){
+    if(replicatedEventsCoordinator == null){
+      replicatedEventsCoordinator = providedEventsCoordinator.get();
+    }
+    return replicatedEventsCoordinator;
+  }
+
+
+
+  public void replicateReindex(Serializable id) throws IOException {
+    if(getProvidedEventsCoordinator().isReplicationEnabled()) {
+      getProvidedEventsCoordinator().getReplicatedOutgoingAccountBaseIndexEventsFeed().replicateReindex(id);
+    }
+  }
+
+
   @Override
-  public void index(AccountGroup.UUID uuid) {
+  public void index(AccountGroup.UUID uuid) throws IOException {
+    indexImplementation(uuid, getProvidedEventsCoordinator().isReplicationEnabled());
+  }
+
+
+  /**
+   * To allow an index to take place locally only, usually called by a handler in response to a replicated event,
+   * so as to avoid a cyclic replication of the same event.
+   */
+  @Override
+  public void indexNoRepl(Serializable identifier) throws IOException {
+    indexImplementation((AccountGroup.UUID) identifier, false);
+  }
+
+  public void indexImplementation(AccountGroup.UUID uuid, boolean replicate) throws IOException {
     // Evict the cache to get an up-to-date value for sure.
-    groupCache.evict(uuid);
+    groupCache.evict(uuid, replicate);
     Optional<InternalGroup> internalGroup = groupCache.get(uuid);
 
     if (internalGroup.isPresent()) {
@@ -127,6 +167,11 @@ public class GroupIndexerImpl implements GroupIndexer {
         }
       }
     }
+
+    if (replicate) {
+      replicateReindex(uuid);
+    }
+
     fireGroupIndexedEvent(uuid.get());
   }
 

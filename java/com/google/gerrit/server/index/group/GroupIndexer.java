@@ -14,17 +14,20 @@
 
 package com.google.gerrit.server.index.group;
 
+import com.google.gerrit.server.replication.customevents.ReplicatedAccountIndexer;
 import com.google.gerrit.entities.AccountGroup;
 
+import java.io.IOException;
+
 /** Interface for indexing an internal Gerrit group. */
-public interface GroupIndexer {
+public interface GroupIndexer extends ReplicatedAccountIndexer {
 
   /**
    * Synchronously index a group.
    *
    * @param uuid group UUID to index.
    */
-  void index(AccountGroup.UUID uuid);
+  void index(AccountGroup.UUID uuid) throws IOException;
 
   /**
    * Synchronously reindex a group if it is stale.

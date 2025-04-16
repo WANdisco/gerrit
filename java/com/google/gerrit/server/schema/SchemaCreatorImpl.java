@@ -20,6 +20,7 @@ import com.google.gerrit.entities.AccountGroup;
 import com.google.gerrit.entities.GroupReference;
 import com.google.gerrit.entities.InternalGroup;
 import com.google.gerrit.exceptions.DuplicateKeyException;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import com.google.gerrit.git.RefUpdateUtil;
 import com.google.gerrit.metrics.MetricMaker;
 import com.google.gerrit.server.GerritPersonIdent;
@@ -53,6 +54,7 @@ import org.eclipse.jgit.lib.Repository;
 // testing purposes.
 public class SchemaCreatorImpl implements SchemaCreator {
   private final GitRepositoryManager repoManager;
+  private final ReplicatedConfiguration replicatedConfiguration;
   private final AllProjectsCreator allProjectsCreator;
   private final AllUsersCreator allUsersCreator;
   private final AllUsersName allUsersName;
@@ -67,6 +69,7 @@ public class SchemaCreatorImpl implements SchemaCreator {
   @Inject
   public SchemaCreatorImpl(
       GitRepositoryManager repoManager,
+      ReplicatedConfiguration replicatedConfiguration,
       AllProjectsCreator ap,
       AllUsersCreator auc,
       AllUsersName allUsersName,
@@ -77,6 +80,7 @@ public class SchemaCreatorImpl implements SchemaCreator {
       MetricMaker metricMaker,
       AllProjectsName apName) {
     this.repoManager = repoManager;
+    this.replicatedConfiguration = replicatedConfiguration;
     allProjectsCreator = ap;
     allUsersCreator = auc;
     this.allUsersName = allUsersName;
@@ -108,6 +112,7 @@ public class SchemaCreatorImpl implements SchemaCreator {
     Sequences seqs =
         new Sequences(
             config,
+            replicatedConfiguration,
             repoManager,
             GitReferenceUpdated.DISABLED,
             allProjectsName,

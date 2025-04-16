@@ -454,8 +454,9 @@ public class StarredChangesUtil {
           return;
         case LOCK_FAILURE:
           throw new LockFailureException(String.format("Delete star ref %s failed", refName), u);
-        case NEW:
         case NO_CHANGE:
+          return;
+        case NEW:
         case FAST_FORWARD:
         case IO_FAILURE:
         case NOT_ATTEMPTED:

@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+ 
 // Copyright (C) 2015 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +36,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.server.config.RepositoryConfig;
 import com.google.gerrit.server.config.SitePaths;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -59,7 +73,7 @@ public class MultiBaseLocalDiskRepositoryManagerTest {
   }
 
   @Test
-  public void defaultRepositoryLocation()
+  public void testDefaultRepositoryLocation()
       throws RepositoryCaseMismatchException, RepositoryNotFoundException, IOException {
     Project.NameKey someProjectKey = Project.nameKey("someProject");
     Repository repo = repoManager.createRepository(someProjectKey);
@@ -84,7 +98,7 @@ public class MultiBaseLocalDiskRepositoryManagerTest {
   }
 
   @Test
-  public void alternateRepositoryLocation() throws IOException {
+  public void testAlternateRepositoryLocation() throws IOException {
     Path alternateBasePath = temporaryFolder.newFolder().toPath();
     Project.NameKey someProjectKey = Project.nameKey("someProject");
     when(configMock.getBasePath(someProjectKey)).thenReturn(alternateBasePath);
@@ -112,7 +126,7 @@ public class MultiBaseLocalDiskRepositoryManagerTest {
   }
 
   @Test
-  public void listReturnRepoFromProperLocation() throws IOException {
+  public void testListReturnRepoFromProperLocation() throws IOException, PreconditionFailedException {
     Project.NameKey basePathProject = Project.nameKey("basePathProject");
     Project.NameKey altPathProject = Project.nameKey("altPathProject");
     Project.NameKey misplacedProject1 = Project.nameKey("misplacedProject1");

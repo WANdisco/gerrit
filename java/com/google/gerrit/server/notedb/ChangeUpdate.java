@@ -334,7 +334,9 @@ public class ChangeUpdate extends AbstractChangeUpdate {
 
     copiedApprovals.add(psaBuilder.build());
   }
-
+  public boolean hasCopiedApprovals() {
+    return !copiedApprovals.isEmpty();
+  }
   public void merge(SubmissionId submissionId, Iterable<SubmitRecord> submitRecords) {
     this.status = Change.Status.MERGED;
     this.submissionId = submissionId.toString();
