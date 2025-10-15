@@ -24,6 +24,10 @@ import com.google.gerrit.server.permissions.SectionSortCache.EntryVal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
+
+import com.google.gerrit.server.replication.TestingReplicatedEventsCoordinator;
+import org.eclipse.jgit.errors.ConfigInvalidException;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -37,9 +41,11 @@ public class SectionSortCacheTest {
   private static final String REF_BASE = "refs/base";
 
   @Before
-  public void setup() {
+  public void setup() throws Exception {
+    Properties testingProperties = new Properties();
+
     cache = CacheBuilder.newBuilder().build();
-    sectionSortCache = new SectionSortCache(cache);
+    sectionSortCache = new SectionSortCache(cache, new TestingReplicatedEventsCoordinator(testingProperties));
   }
 
   @Test

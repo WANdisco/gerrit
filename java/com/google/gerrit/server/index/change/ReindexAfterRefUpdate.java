@@ -25,6 +25,7 @@ import com.google.gerrit.entities.Account;
 import com.google.gerrit.entities.BranchNameKey;
 import com.google.gerrit.entities.Change;
 import com.google.gerrit.entities.Project;
+import com.google.gerrit.entities.Project.NameKey;
 import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.extensions.events.GitBatchRefUpdateListener;
 import com.google.gerrit.server.change.MergeabilityComputationBehavior;
@@ -39,6 +40,8 @@ import com.google.gerrit.server.util.OneOffRequestContext;
 import com.google.gerrit.server.util.RequestContext;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
@@ -92,7 +95,11 @@ public class ReindexAfterRefUpdate implements GitBatchRefUpdateListener {
         if (RefNames.isRefsUsers(ref.getRefName()) && !RefNames.isRefsEdit(ref.getRefName())) {
           Account.Id accountId = Account.Id.fromRef(ref.getRefName());
           if (accountId != null) {
-            indexer.get().index(accountId);
+            try {
+              indexer.get().index(accountId);
+            } catch (IOException e) {
+              logger.atWarning().log("Unable to re-index account '%s': %s", accountId, e.getMessage());
+            }
           }
         }
       }

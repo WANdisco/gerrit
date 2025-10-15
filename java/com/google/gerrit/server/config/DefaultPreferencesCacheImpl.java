@@ -19,7 +19,9 @@ import com.google.common.cache.LoadingCache;
 import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.exceptions.StorageException;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.git.GitRepositoryManager;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Singleton;
@@ -33,6 +35,7 @@ import org.eclipse.jgit.lib.Repository;
 
 @Singleton
 public class DefaultPreferencesCacheImpl implements DefaultPreferencesCache {
+  @ReplicatedCache
   private static final String NAME = "default_preferences";
 
   public static Module module() {
@@ -53,12 +56,12 @@ public class DefaultPreferencesCacheImpl implements DefaultPreferencesCache {
 
   @Inject
   DefaultPreferencesCacheImpl(
-      GitRepositoryManager repositoryManager,
-      AllUsersName allUsersName,
-      @Named(NAME) LoadingCache<ObjectId, CachedPreferences> cache) {
+          GitRepositoryManager repositoryManager,
+          AllUsersName allUsersName,
+          @Named(NAME) LoadingCache<ObjectId, CachedPreferences> cache, ReplicatedEventsCoordinator replicatedEventsCoordinator) {
     this.repositoryManager = repositoryManager;
     this.allUsersName = allUsersName;
-    this.cache = cache;
+    this.cache = replicatedEventsCoordinator.createReplicatedLoadingCache(NAME, cache, allUsersName.get(), ObjectId.class);
   }
 
   @Override

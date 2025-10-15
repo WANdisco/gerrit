@@ -36,6 +36,7 @@ import com.google.gerrit.proto.Protos;
 import com.google.gerrit.server.CommentsUtil;
 import com.google.gerrit.server.DraftCommentsReader;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.cache.proto.Cache.AllCommentContextProto;
 import com.google.gerrit.server.cache.proto.Cache.AllCommentContextProto.CommentContextProto;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
@@ -56,6 +57,7 @@ import java.util.stream.Collectors;
 public class CommentContextCacheImpl implements CommentContextCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @SkipCacheReplication
   private static final String CACHE_NAME = "comment_context";
 
   /**

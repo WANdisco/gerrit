@@ -1,3 +1,16 @@
+# GerritMS Code Fork
+This is the main codebase for Gerrit with WANdisco replication support called Gerrit MultiSite.
+
+Gerrit Multisite is a fork based on [Gerrit](https://www.gerritcodereview.com) that adds replication
+support and full Read Write Multi Master on Geographically seperate locations.
+
+See https://wandisco.com/scm for more information on LiveCode - replicated SCM products.
+
+## WANdisco Build Information
+For further information please refer to the WANdisco readme.
+[README_WD.md](./README_WD.md)
+
+
 # Gerrit Code Review
 
 [Gerrit](https://www.gerritcodereview.com) is a code review and project

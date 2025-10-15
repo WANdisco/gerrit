@@ -21,6 +21,7 @@ import com.google.gerrit.server.data.RefUpdateAttribute;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@isReplicatedServerEvent
 public class BatchRefUpdateEvent extends ProjectEvent {
 
   public static final String TYPE = "batch-ref-updated";

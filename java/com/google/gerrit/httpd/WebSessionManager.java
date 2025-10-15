@@ -34,8 +34,12 @@ import com.google.gerrit.common.Nullable;
 import com.google.gerrit.entities.Account;
 import com.google.gerrit.server.account.externalids.ExternalId;
 import com.google.gerrit.server.account.externalids.ExternalIdKeyFactory;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.config.ConfigUtil;
 import com.google.gerrit.server.config.GerritServerConfig;
+import com.google.gerrit.server.replication.GerritEventFactory;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.gson.GsonTypeAdapterRegistry;
 import com.google.inject.Inject;
 import com.google.inject.assistedinject.Assisted;
 import java.io.ByteArrayOutputStream;
@@ -44,11 +48,15 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.security.SecureRandom;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.eclipse.jgit.lib.Config;
 
 public class WebSessionManager {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+  // WebSessions are created per user, per connection to ensure tenant information is not shared across connections.
+
+  @ReplicatedCache
   public static final String CACHE_NAME = "web_sessions";
 
   private final long sessionMaxAgeMillis;
@@ -56,9 +64,16 @@ public class WebSessionManager {
   private final Cache<String, Val> self;
 
   @Inject
-  WebSessionManager(@GerritServerConfig Config cfg, @Assisted Cache<String, Val> cache) {
+  WebSessionManager(@GerritServerConfig Config cfg,
+                    ReplicatedEventsCoordinator replicatedEventsCoordinator,
+                    @Assisted Cache<String, Val> cache) {
     prng = new SecureRandom();
-    self = cache;
+
+    Map<Class<?>, Object> webSessionValAdapter = Map.of(WebSessionManager.Val.class, new WebSessionValTypeAdapter());
+    GerritEventFactory.registerAdditionalTypeAdapter(GsonTypeAdapterRegistry.AdapterKind.TYPE_ADAPTER, webSessionValAdapter);
+
+    self = replicatedEventsCoordinator.createReplicatedCache(CACHE_NAME, cache,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllProjectsName(), String.class);
 
     sessionMaxAgeMillis =
         SECONDS.toMillis(
@@ -189,7 +204,8 @@ public class WebSessionManager {
   public static final class Val implements Serializable {
     static final long serialVersionUID = 2L;
 
-    @Inject private static transient ExternalIdKeyFactory externalIdKeyFactory;
+    @Inject
+    public static ExternalIdKeyFactory externalIdKeyFactory;
 
     private transient Account.Id accountId;
     private transient long refreshCookieAt;

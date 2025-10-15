@@ -23,6 +23,9 @@ import com.google.gerrit.common.Nullable;
 import com.google.gerrit.extensions.client.InheritableBoolean;
 import com.google.gerrit.extensions.client.ProjectState;
 import com.google.gerrit.extensions.client.SubmitType;
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
+
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -40,6 +43,10 @@ public abstract class Project {
 
   public static NameKey nameKey(String name) {
     return new NameKey(name);
+  }
+
+  public static TypeAdapter<Project> typeAdapter(Gson gson) {
+    return new AutoValue_Project.GsonTypeAdapter(gson);
   }
 
   /**

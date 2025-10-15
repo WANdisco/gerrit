@@ -1,0 +1,3 @@
+---
+fixes:
+  - Repositories on NFS can now be completely removed.

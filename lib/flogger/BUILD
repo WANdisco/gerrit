@@ -6,7 +6,7 @@ java_library(
     visibility = ["//visibility:public"],
     exports = [
         "@flogger-google-extensions//jar",
-        "@flogger-log4j-backend//jar",
+        "@flogger-slf4j-backend//jar",
         "@flogger-system-backend//jar",
         "@flogger//jar",
     ],

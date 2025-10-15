@@ -24,6 +24,7 @@ import com.google.gerrit.entities.Change;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.extensions.restapi.BadRequestException;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.cache.proto.Cache;
 import com.google.gerrit.server.cache.proto.Cache.PureRevertKeyProto;
 import com.google.gerrit.server.cache.serialize.BooleanCacheSerializer;
@@ -33,6 +34,7 @@ import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.notedb.ChangeNotes;
 import com.google.gerrit.server.project.ProjectCache;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Singleton;
@@ -57,6 +59,7 @@ import org.eclipse.jgit.util.io.DisabledOutputStream;
 /** Computes and caches if a change is a pure revert of another change. */
 @Singleton
 public class PureRevertCache {
+  @ReplicatedCache
   private static final String ID_CACHE = "pure_revert";
 
   public static Module module() {
@@ -78,9 +81,9 @@ public class PureRevertCache {
 
   @Inject
   PureRevertCache(
-      @Named(ID_CACHE) LoadingCache<PureRevertKeyProto, Boolean> cache,
-      ChangeNotes.Factory notesFactory) {
-    this.cache = cache;
+          @Named(ID_CACHE) LoadingCache<PureRevertKeyProto, Boolean> cache,
+          ChangeNotes.Factory notesFactory, ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.cache = replicatedEventsCoordinator.createReplicatedLoadingCache(ID_CACHE, cache, PureRevertKeyProto::getProject, PureRevertKeyProto.class);
     this.notesFactory = notesFactory;
   }
 

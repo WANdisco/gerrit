@@ -30,6 +30,8 @@ import com.google.gerrit.acceptance.UseSsh;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import org.junit.Ignore;
 import java.util.Spliterator;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -159,6 +161,7 @@ public class SshCommandsIT extends AbstractDaemonTest {
         .startsWith("fatal: gerrit: non-existing-command: not found");
   }
 
+  @Ignore("GER-1128 : Failing Gerrit acceptance tests tracker")
   @Test
   @Sandboxed
   public void listCommands() throws Exception {

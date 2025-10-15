@@ -14,6 +14,7 @@
 
 package com.google.gerrit.acceptance;
 
+import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.entities.GroupReference;
 import com.google.gerrit.extensions.events.LifecycleListener;
 import com.google.gerrit.lifecycle.LifecycleModule;
@@ -30,6 +31,8 @@ import org.eclipse.jgit.lib.Config;
 
 /** Reindex all groups at Gerrit daemon startup. */
 public class ReindexGroupsAtStartup implements LifecycleListener {
+  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
   private final GroupIndexer groupIndexer;
   private final Groups groups;
   private final Config cfg;
@@ -64,7 +67,13 @@ public class ReindexGroupsAtStartup implements LifecycleListener {
       throw new IllegalStateException("Unable to reindex groups, tests may fail", e);
     }
 
-    allGroupReferences.forEach(group -> groupIndexer.index(group.getUUID()));
+    allGroupReferences.forEach(group -> {
+      try {
+        groupIndexer.index(group.getUUID());
+      } catch (IOException e) {
+        logger.atSevere().log("Unable to re-index group '%s'", group.getName());
+      }
+    });
   }
 
   @Override

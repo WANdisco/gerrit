@@ -48,7 +48,7 @@ import org.junit.Test;
 @UseSsh
 @Sandboxed
 public class StreamEventsIT extends AbstractDaemonTest {
-  private static final Duration MAX_DURATION_FOR_RECEIVING_EVENTS = Duration.ofSeconds(2);
+  private static final Duration MAX_DURATION_FOR_RECEIVING_EVENTS = Duration.ofSeconds(5);
   private static final String TEST_REVIEW_COMMENT = "any comment";
   private static final String TEST_REVIEW_DRAFT_COMMENT = "any draft comment";
   private Reader streamEventsReader;

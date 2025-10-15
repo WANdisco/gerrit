@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.config.SitePaths;
 import com.google.gerrit.server.git.GitRepositoryManager;
@@ -100,6 +101,7 @@ public class RulesCache {
   private static final ImmutableList<String> PACKAGE_LIST =
       ImmutableList.of(Prolog.BUILTIN, "gerrit");
 
+  @SkipCacheReplication
   static final String CACHE_NAME = "prolog_rules";
 
   private final boolean enableProjectRules;

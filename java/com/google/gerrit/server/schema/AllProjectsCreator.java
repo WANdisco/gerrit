@@ -33,6 +33,7 @@ import com.google.gerrit.entities.LabelType;
 import com.google.gerrit.entities.Permission;
 import com.google.gerrit.entities.PermissionRule.Action;
 import com.google.gerrit.entities.RefNames;
+import com.google.gerrit.extensions.restapi.PreconditionFailedException;
 import com.google.gerrit.server.GerritPersonIdent;
 import com.google.gerrit.server.Sequence;
 import com.google.gerrit.server.config.AllProjectsName;
@@ -98,7 +99,7 @@ public class AllProjectsCreator {
           initAllProjects(git, input);
           RefUpdate u = git.updateRef(Constants.HEAD);
           u.link(RefNames.REFS_CONFIG);
-        } catch (RepositoryNotFoundException err) {
+        } catch (RepositoryNotFoundException | PreconditionFailedException err) {
           String name = allProjectsName.get();
           throw new IOException("Cannot create repository " + name, err);
         }

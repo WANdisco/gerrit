@@ -19,6 +19,7 @@ import com.google.gerrit.entities.Change;
 import com.google.gerrit.server.data.AccountAttribute;
 import java.util.Map;
 
+@isReplicatedServerEvent
 public class CustomKeyedValuesChangedEvent extends ChangeEvent {
   static final String TYPE = "custom-keyed-values-changed";
   public Supplier<AccountAttribute> editor;
@@ -29,4 +30,5 @@ public class CustomKeyedValuesChangedEvent extends ChangeEvent {
   public CustomKeyedValuesChangedEvent(Change change) {
     super(TYPE, change);
   }
+
 }

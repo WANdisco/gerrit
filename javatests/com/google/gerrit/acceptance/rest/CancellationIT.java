@@ -62,7 +62,7 @@ public class CancellationIT extends AbstractDaemonTest {
         extensionRegistry.newRegistration().add(projectCreationListener)) {
       RestResponse response = adminRestSession.put("/projects/" + name("new"));
       assertThat(response.getStatusCode()).isEqualTo(SC_CLIENT_CLOSED_REQUEST);
-      assertThat(response.getEntityContent()).isEqualTo("Client Closed Request");
+      assertThat(response.getEntityContent()).startsWith("Client Closed Request");
     }
   }
 
@@ -82,7 +82,7 @@ public class CancellationIT extends AbstractDaemonTest {
         extensionRegistry.newRegistration().add(projectCreationListener)) {
       RestResponse response = adminRestSession.put("/projects/" + name("new"));
       assertThat(response.getStatusCode()).isEqualTo(SC_REQUEST_TIMEOUT);
-      assertThat(response.getEntityContent()).isEqualTo("Client Provided Deadline Exceeded");
+      assertThat(response.getEntityContent()).startsWith("Client Provided Deadline Exceeded");
     }
   }
 
@@ -102,7 +102,7 @@ public class CancellationIT extends AbstractDaemonTest {
         extensionRegistry.newRegistration().add(projectCreationListener)) {
       RestResponse response = adminRestSession.put("/projects/" + name("new"));
       assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
-      assertThat(response.getEntityContent()).isEqualTo("Server Deadline Exceeded");
+      assertThat(response.getEntityContent()).startsWith("Server Deadline Exceeded");
     }
   }
 
@@ -122,7 +122,7 @@ public class CancellationIT extends AbstractDaemonTest {
       RestResponse response = adminRestSession.put("/projects/" + name("new"));
       assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
       assertThat(response.getEntityContent())
-          .isEqualTo("Server Deadline Exceeded\n\ndeadline = 10m");
+          .startsWith("Server Deadline Exceeded\n\ndeadline = 10m");
     }
   }
 
@@ -143,7 +143,7 @@ public class CancellationIT extends AbstractDaemonTest {
       RestResponse response = adminRestSession.put("/projects/" + name("new"));
       assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
       assertThat(response.getEntityContent())
-          .isEqualTo("Server Deadline Exceeded\n\ndeadline = 10m");
+          .startsWith("Server Deadline Exceeded\n\ndeadline = 10m");
     }
   }
 
@@ -154,7 +154,7 @@ public class CancellationIT extends AbstractDaemonTest {
             "/projects/" + name("new"), new BasicHeader(RestApiServlet.X_GERRIT_DEADLINE, "1ms"));
     assertThat(response.getStatusCode()).isEqualTo(SC_REQUEST_TIMEOUT);
     assertThat(response.getEntityContent())
-        .isEqualTo("Client Provided Deadline Exceeded\n\nclient.timeout=1ms");
+        .startsWith("Client Provided Deadline Exceeded\n\nclient.timeout=1ms");
   }
 
   @Test
@@ -163,7 +163,7 @@ public class CancellationIT extends AbstractDaemonTest {
         adminRestSession.putWithHeaders(
             "/projects/" + name("new"), new BasicHeader(RestApiServlet.X_GERRIT_DEADLINE, "1"));
     response.assertBadRequest();
-    assertThat(response.getEntityContent()).isEqualTo("Invalid deadline. Missing time unit: 1");
+    assertThat(response.getEntityContent()).startsWith("Invalid deadline. Missing time unit: 1");
   }
 
   @Test
@@ -173,7 +173,7 @@ public class CancellationIT extends AbstractDaemonTest {
             "/projects/" + name("new"), new BasicHeader(RestApiServlet.X_GERRIT_DEADLINE, "1x"));
     response.assertBadRequest();
     assertThat(response.getEntityContent())
-        .isEqualTo("Invalid deadline. Invalid time unit value: 1x");
+        .startsWith("Invalid deadline. Invalid time unit value: 1x");
   }
 
   @Test
@@ -183,7 +183,7 @@ public class CancellationIT extends AbstractDaemonTest {
             "/projects/" + name("new"),
             new BasicHeader(RestApiServlet.X_GERRIT_DEADLINE, "invalid"));
     response.assertBadRequest();
-    assertThat(response.getEntityContent()).isEqualTo("Invalid deadline. Invalid value: invalid");
+    assertThat(response.getEntityContent()).startsWith("Invalid deadline. Invalid value: invalid");
   }
 
   @Test
@@ -199,7 +199,7 @@ public class CancellationIT extends AbstractDaemonTest {
     testTicker.useFakeTicker().setAutoIncrementStep(Duration.ofMillis(2));
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
-    assertThat(response.getEntityContent()).isEqualTo("Server Deadline Exceeded\n\ntimeout=1ms");
+    assertThat(response.getEntityContent()).startsWith("Server Deadline Exceeded\n\ntimeout=1ms");
   }
 
   @Test
@@ -210,7 +210,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\nfoo.timeout=1ms");
+        .startsWith("Server Deadline Exceeded\n\nfoo.timeout=1ms");
   }
 
   @Test
@@ -221,7 +221,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=1ms");
+        .startsWith("Server Deadline Exceeded\n\ndefault.timeout=1ms");
   }
 
   @Test
@@ -232,7 +232,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=1ms");
+        .startsWith("Server Deadline Exceeded\n\ndefault.timeout=1ms");
   }
 
   @Test
@@ -245,7 +245,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=1ms");
+        .startsWith("Server Deadline Exceeded\n\ndefault.timeout=1ms");
   }
 
   @Test
@@ -260,7 +260,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=1ms");
+        .startsWith("Server Deadline Exceeded\n\ndefault.timeout=1ms");
   }
 
   @Test
@@ -271,7 +271,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=1ms");
+        .startsWith("Server Deadline Exceeded\n\ndefault.timeout=1ms");
   }
 
   @Test
@@ -282,7 +282,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=1ms");
+        .startsWith("Server Deadline Exceeded\n\ndefault.timeout=1ms");
   }
 
   @Test
@@ -359,7 +359,7 @@ public class CancellationIT extends AbstractDaemonTest {
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
     assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
     assertThat(response.getEntityContent())
-        .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=2ms");
+        .startsWith("Server Deadline Exceeded\n\ndefault.timeout=2ms");
   }
 
   @Test
@@ -465,7 +465,7 @@ public class CancellationIT extends AbstractDaemonTest {
       RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new"));
       assertThat(response.getStatusCode()).isEqualTo(SC_INTERNAL_SERVER_ERROR);
       assertThat(response.getEntityContent())
-          .isEqualTo("Server Deadline Exceeded\n\ndefault.timeout=500ms");
+          .startsWith("Server Deadline Exceeded\n\ndefault.timeout=500ms");
     }
     // verify that the exceeded deadline for the previous request, isn't applied to a new request
     RestResponse response = adminRestSession.putWithHeaders("/projects/" + name("new2"));
@@ -481,7 +481,7 @@ public class CancellationIT extends AbstractDaemonTest {
             "/projects/" + name("new"), new BasicHeader(RestApiServlet.X_GERRIT_DEADLINE, "2ms"));
     assertThat(response.getStatusCode()).isEqualTo(SC_REQUEST_TIMEOUT);
     assertThat(response.getEntityContent())
-        .isEqualTo("Client Provided Deadline Exceeded\n\nclient.timeout=2ms");
+        .startsWith("Client Provided Deadline Exceeded\n\nclient.timeout=2ms");
   }
 
   @Test

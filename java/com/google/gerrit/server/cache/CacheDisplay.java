@@ -1,3 +1,16 @@
+
+/********************************************************************************
+ * Copyright (c) 2014-2024 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+
 // Copyright (C) 2021 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +28,7 @@
 package com.google.gerrit.server.cache;
 
 import com.google.common.base.Strings;
+import com.google.gerrit.server.replication.ReplicatorMetrics;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Collection;
@@ -37,44 +51,37 @@ public class CacheDisplay {
 
   public void displayCaches() throws IOException {
     stdout.write(
-        String.format( //
-            "%1s %-" + nw + "s|%-21s|  %-5s |%-9s|\n" //
-            ,
-            "" //
-            ,
-            "Name" //
-            ,
-            "Entries" //
-            ,
-            "AvgGet" //
-            ,
-            "Hit Ratio" //
-            ));
+        String.format(//
+            "%1s %-"+nw+"s|%-21s|  %-5s |%-9s|%-9s|%-9s|%-9s|\n" //
+            , "" //
+            , "Name" //
+            , "Entries" //
+            , "AvgGet" //
+            , "Hit Ratio" //
+            , "Evct Sent" //
+            , "Evct Recv" //
+            , "Reld Recv" //
+        ));
     stdout.write(
-        String.format( //
-            "%1s %-" + nw + "s|%6s %6s %7s|  %-5s  |%-4s %-4s|\n" //
-            ,
-            "" //
-            ,
-            "" //
-            ,
-            "Mem" //
-            ,
-            "Disk" //
-            ,
-            "Space" //
-            ,
-            "" //
-            ,
-            "Mem" //
-            ,
-            "Disk" //
-            ));
+        String.format(//
+            "%1s %-"+nw+"s|%6s %6s %7s|  %-5s  |%-4s %-4s|%-9s|%-9s|%-9s|\n" //
+            , "" //
+            , "" //
+            , "Mem" //
+            , "Disk" //
+            , "Space" //
+            , "" //
+            , "Mem" //
+            , "Disk" //
+            ,""
+            ,""
+            ,""
+        ));
     stdout.write("--");
     for (int i = 0; i < nw; i++) {
       stdout.write('-');
     }
-    stdout.write("+---------------------+---------+---------+\n");
+    stdout.write("+---------------------+---------+---------+---------+---------+---------+\n");
     printMemoryCoreCaches(caches);
     printMemoryPluginCaches(caches);
     printDiskCaches(caches);
@@ -108,7 +115,7 @@ public class CacheDisplay {
   private void printCache(CacheInfo cache) throws IOException {
     stdout.write(
         String.format(
-            "%1s %-" + nw + "s|%6s %6s %7s| %7s |%4s %4s|\n",
+            "%1s %-" + nw + "s|%6s %6s %7s| %7s |%4s %4s|%9s|%9s|%9s|\n",
             CacheInfo.CacheType.DISK.equals(cache.type) ? "D" : "",
             cache.name,
             nullToEmpty(cache.entries.mem),
@@ -116,7 +123,10 @@ public class CacheDisplay {
             Strings.nullToEmpty(cache.entries.space),
             Strings.nullToEmpty(cache.averageGet),
             formatAsPercent(cache.hitRatio.mem),
-            formatAsPercent(cache.hitRatio.disk)));
+            formatAsPercent(cache.hitRatio.disk),
+            ReplicatorMetrics.getCacheInvalidatesSent().count(cache.name),
+            ReplicatorMetrics.getCacheInvalidatesPerformed().count(cache.name),
+            ReplicatorMetrics.getCacheGetsPerformed().count(cache.name)));
   }
 
   private static String nullToEmpty(Long l) {

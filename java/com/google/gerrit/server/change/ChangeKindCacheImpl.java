@@ -33,6 +33,7 @@ import com.google.gerrit.server.cache.CacheModule;
 import com.google.gerrit.server.cache.proto.Cache.ChangeKindKeyProto;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
 import com.google.gerrit.server.cache.serialize.EnumCacheSerializer;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.cache.serialize.ObjectIdConverter;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.git.GitRepositoryManager;
@@ -62,6 +63,7 @@ import org.eclipse.jgit.revwalk.RevWalk;
 public class ChangeKindCacheImpl implements ChangeKindCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @SkipCacheReplication
   private static final String ID_CACHE = "change_kind";
 
   public static Module module() {

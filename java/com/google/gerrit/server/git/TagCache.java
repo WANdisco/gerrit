@@ -17,7 +17,9 @@ package com.google.gerrit.server.git;
 import com.google.common.cache.Cache;
 import com.google.gerrit.entities.Project;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.cache.serialize.StringCacheSerializer;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Singleton;
@@ -27,6 +29,7 @@ import org.eclipse.jgit.lib.ObjectId;
 
 @Singleton
 public class TagCache {
+  @ReplicatedCache
   private static final String CACHE_NAME = "git_tags";
 
   public static Module module() {
@@ -45,8 +48,10 @@ public class TagCache {
   private final Cache<String, TagSetHolder> cache;
 
   @Inject
-  TagCache(@Named(CACHE_NAME) Cache<String, TagSetHolder> cache) {
-    this.cache = cache;
+  TagCache(@Named(CACHE_NAME) Cache<String, TagSetHolder> cache,
+           ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.cache = replicatedEventsCoordinator.createReplicatedCache(CACHE_NAME,
+            cache, projectName -> projectName, String.class);
   }
 
   /**

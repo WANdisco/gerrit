@@ -27,12 +27,15 @@ import com.google.gerrit.extensions.events.GitReferenceUpdatedListener;
 import com.google.gerrit.extensions.registration.DynamicSet;
 import com.google.gerrit.server.ReviewerSet;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.index.change.ChangeField;
 import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
 import com.google.gerrit.server.query.change.ChangeData;
 import com.google.gerrit.server.query.change.InternalChangeQuery;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.server.util.ManualRequestContext;
 import com.google.gerrit.server.util.OneOffRequestContext;
 import com.google.inject.Inject;
@@ -59,6 +62,7 @@ public class SearchingChangeCacheImpl
     implements ChangesByProjectCache, GitReferenceUpdatedListener {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @ReplicatedCache
   static final String ID_CACHE = "changes";
 
   public static class SearchingChangeCacheImplModule extends CacheModule {
@@ -91,9 +95,9 @@ public class SearchingChangeCacheImpl
 
   @Inject
   SearchingChangeCacheImpl(
-      @Named(ID_CACHE) LoadingCache<Project.NameKey, List<CachedChange>> cache,
-      ChangeData.Factory changeDataFactory) {
-    this.cache = cache;
+          @Named(ID_CACHE) LoadingCache<Project.NameKey, List<CachedChange>> cache,
+          ChangeData.Factory changeDataFactory, ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.cache = replicatedEventsCoordinator.createReplicatedLoadingCache(ID_CACHE, cache, Project.NameKey::get, Project.NameKey.class);
     this.changeDataFactory = changeDataFactory;
   }
 

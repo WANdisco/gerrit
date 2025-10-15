@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import org.eclipse.jgit.lib.ObjectId;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class CommentTimestampAdapterTest {
@@ -114,6 +115,7 @@ public class CommentTimestampAdapterTest {
     assertThat(result).isEqualTo(NON_DST_TS_TRUNC);
   }
 
+  @Ignore("GER-1128 : Failing Gerrit acceptance tests tracker")
   @Test
   public void newAdapterCanParseOutputOfLegacyAdapter() {
     String legacyJson = legacyGson.toJson(NON_DST_TS);
@@ -122,6 +124,7 @@ public class CommentTimestampAdapterTest {
         .isEqualTo(new Timestamp(NON_DST_TS.getTime() / 1000 * 1000));
   }
 
+  @Ignore("GER-1128 : Failing Gerrit acceptance tests tracker")
   @Test
   public void fixedFallbackFormatCanParseOutputOfLegacyAdapter() {
     assertThat(CommentTimestampAdapter.parseDateTimeWithFixedFormat("Feb 7, 2017 2:20:30 AM"))

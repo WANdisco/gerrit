@@ -199,6 +199,7 @@ public class DefaultPermissionBackend extends PermissionBackend {
         case VIEW_ALL_ACCOUNTS:
         case VIEW_CONNECTIONS:
         case VIEW_PLUGINS:
+        case VIEW_REPLICATOR_STATS:
           return has(globalPermissionName(perm)) || isAdmin();
 
         case VIEW_SECONDARY_EMAILS:

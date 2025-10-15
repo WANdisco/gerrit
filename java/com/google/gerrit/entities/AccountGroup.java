@@ -16,6 +16,10 @@ package com.google.gerrit.entities;
 
 import com.google.auto.value.AutoValue;
 import com.google.gerrit.common.Nullable;
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
+
+import java.io.Serializable;
 
 public final class AccountGroup {
   public static NameKey nameKey(String n) {
@@ -48,7 +52,7 @@ public final class AccountGroup {
 
   /** Globally unique identifier. */
   @AutoValue
-  public abstract static class UUID implements Comparable<UUID> {
+  public abstract static class UUID implements Serializable, Comparable<UUID> {
     abstract String uuid();
 
     public String get() {
@@ -98,6 +102,10 @@ public final class AccountGroup {
     public final String toString() {
       return KeyUtil.encode(get());
     }
+
+    public static TypeAdapter<AccountGroup.UUID> typeAdapter(Gson gson) {
+      return new AutoValue_AccountGroup_UUID.GsonTypeAdapter(gson);
+    }
   }
 
   public static Id id(int id) {
@@ -122,5 +130,10 @@ public final class AccountGroup {
     public final String toString() {
       return Integer.toString(get());
     }
+
+    public static TypeAdapter<AccountGroup.Id> typeAdapter(Gson gson) {
+      return new AutoValue_AccountGroup_Id.GsonTypeAdapter(gson);
+    }
+
   }
 }

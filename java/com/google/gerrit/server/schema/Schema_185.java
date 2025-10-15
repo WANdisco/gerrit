@@ -69,6 +69,13 @@ public class Schema_185 implements NoteDbSchemaVersion {
         String.format(
             "... (%.3f s) Migrated label configurations of all %d projects to schema 185",
             elapsed(), i.get()));
+
+
+    // As we are running this upgrade, it means they have came from a version prior
+    // to 3.7, so prompt them to consider running copy approvals !!
+    ui.message("Note: An upgrade from a version prior to 3.7 was detected." + System.lineSeparator() +
+        "Please consider running CopyApprovals once this upgrade has finished, " +
+        "but before any repository changes are copied out to the other nodes.");
   }
 
   private ExecutorService createExecutor(UpdateUI ui) {

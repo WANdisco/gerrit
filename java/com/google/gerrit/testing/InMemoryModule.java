@@ -107,6 +107,8 @@ import com.google.gerrit.server.patch.DiffExecutor;
 import com.google.gerrit.server.permissions.DefaultPermissionBackendModule;
 import com.google.gerrit.server.plugins.ServerInformationImpl;
 import com.google.gerrit.server.project.DefaultProjectNameLockManager.DefaultProjectNameLockManagerModule;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
 import com.google.gerrit.server.restapi.RestApiModule;
 import com.google.gerrit.server.schema.JdbcAccountPatchReviewStore;
 import com.google.gerrit.server.schema.SchemaCreator;
@@ -199,6 +201,13 @@ public class InMemoryModule extends FactoryModule {
     bind(MetricMaker.class).to(DisabledMetricMaker.class);
 
     install(cfgInjector.getInstance(AccountCacheImpl.AccountCacheModule.class));
+
+    /* For testing we want to disable replication. Here we are setting a wandisco section and key/val pair for
+     * stating that replication is disabled */
+    cfg.setBoolean("wandisco", null, "gerritmsReplicationDisabled", true);
+    install(new ReplicatedConfiguration.Module());
+    install(new NonReplicatedCoordinatorModule());
+
     install(cfgInjector.getInstance(GerritGlobalModule.class));
     install(new AccountNoteDbWriteStorageModule());
     install(new AccountNoteDbReadStorageModule());

@@ -1,4 +1,4 @@
-load("//tools/bzl:maven_jar.bzl", "maven_jar")
+load("//tools/bzl:maven_jar.bzl", "MAVEN_LOCAL", "WANDISCO_ASSETS", "maven_jar")
 
 GUAVA_VERSION = "32.1.2-jre"
 
@@ -89,8 +89,8 @@ def declare_nongoogle_deps():
 
     maven_jar(
         name = "mina-core",
-        artifact = "org.apache.mina:mina-core:2.0.23",
-        sha1 = "391228b25d3a24434b205444cd262780a9ea61e7",
+        artifact = "org.apache.mina:mina-core:2.0.27",
+        sha1 = "d5d353d971b0fb17ae0271f6f2921585f64e1535",
     )
 
     maven_jar(
@@ -126,8 +126,8 @@ def declare_nongoogle_deps():
 
     maven_jar(
         name = "commons-io",
-        artifact = "commons-io:commons-io:2.4",
-        sha1 = "b1b6ea3b7e4aa4f492509a4952029cd8e48019ad",
+        artifact = "commons-io:commons-io:2.11.0",
+        sha1 = "a2503f302b11ebde7ebc3df41daebe0e4eea3689",
     )
 
     # Google internal dependencies: these are developed at Google, so there is
@@ -145,6 +145,12 @@ def declare_nongoogle_deps():
         name = "flogger",
         artifact = "com.google.flogger:flogger:" + FLOGGER_VERS,
         sha1 = "cec29ed8b58413c2e935d86b12d6b696dc285419",
+    )
+
+    maven_jar(
+        name = "flogger-slf4j-backend",
+        artifact = "com.google.flogger:flogger-slf4j-backend:" + FLOGGER_VERS,
+        sha1 = "60ff0071653d079450d087c82dc4da396e401a6f",
     )
 
     maven_jar(
@@ -286,4 +292,60 @@ def declare_nongoogle_deps():
         name = "hamcrest",
         artifact = "org.hamcrest:hamcrest:2.2",
         sha1 = "1820c0968dba3a11a1b30669bb1f01978a91dedc",
+    )
+
+    # WANdisco replication dependencies:
+    #jackson-databind contains all appropriate classes we require in gerrit-gitms-interface
+    #such as ObjectMapper, JsonNode etc
+    _JACKSON_VERSION = "2.11.2"
+    maven_jar(
+        name = "jackson-core",
+        artifact = "com.fasterxml.jackson.core:jackson-core:" + _JACKSON_VERSION,
+    )
+
+    maven_jar(
+        name = "jackson-databind",
+        artifact = "com.fasterxml.jackson.core:jackson-databind:" + _JACKSON_VERSION,
+    )
+
+    #This is required by jackson databind ObjectMapper
+    maven_jar(
+        name = "jackson-annotations",
+        artifact = "com.fasterxml.jackson.core:jackson-annotations:" + _JACKSON_VERSION,
+    )
+
+    maven_jar(
+        name = "javax-activation",
+        artifact = "javax.activation:activation:1.1.1",
+        sha1 = "485de3a253e23f645037828c07f1d7f1af40763a",
+    )
+
+    maven_jar(
+        name = "equalsverifier",
+        artifact = "nl.jqno.equalsverifier:equalsverifier:1.3.1",
+        sha1 = "3c8d6837afa9de0290927582cdd904d8d355c66a",
+    )
+
+    maven_jar(
+        name = "javassist",
+        artifact = "org.javassist:javassist:3.29.1-GA",
+        sha1 = "8737971b43192ee1d61f056ae0a8c55f8d8df9e6",
+    )
+
+    maven_jar(
+        name = "reflections",
+        artifact = "org.reflections:reflections:0.10.2",
+        sha1 = "b638d7ca0e0fe0146b60a0e7ba232ad852a73b31",
+    )
+
+    # WANdisco maven assets
+    _GERRIT_GITMS_VERSION = "4.0.0.1"
+
+    # We don't use the sha1 below when we are in SNAPSHOT
+    # Comment sha1 back in for release versions
+    maven_jar(
+        name = "gerrit-gitms-shared",
+        artifact = "com.wandisco:gerrit-gitms-shared:" + _GERRIT_GITMS_VERSION,
+        repository = WANDISCO_ASSETS,
+        sha1 = "152aa5b9fad4cfdf1893ac6a2aa6a1154ca63daf",
     )

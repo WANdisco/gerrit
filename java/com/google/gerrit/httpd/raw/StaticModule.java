@@ -29,6 +29,7 @@ import com.google.gerrit.httpd.XsrfCookieFilter;
 import com.google.gerrit.httpd.raw.ResourceServlet.Resource;
 import com.google.gerrit.launcher.GerritLauncher;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.config.CanonicalWebUrl;
 import com.google.gerrit.server.config.GerritOptions;
 import com.google.gerrit.server.config.GerritServerConfig;
@@ -75,6 +76,9 @@ public class StaticModule extends ServletModule {
           + "(/[1-9][0-9]*(\\.\\.[1-9][0-9]*)?(/[^+]*)?)?(/comment/[^+]+)?/?$";
 
   private static final Pattern CHANGE_NUMBER_URI_PATTERN = Pattern.compile(CHANGE_NUMBER_URI_REGEX);
+
+  @SkipCacheReplication public static final String CACHE = "static_content";
+  public static final String GERRIT_UI_COOKIE = "GERRIT_UI";
 
   /**
    * Paths that should be treated as static assets when serving PolyGerrit.

@@ -132,7 +132,8 @@ public class ProjectIT extends AbstractDaemonTest {
       eventRecorder.assertRefUpdatedEvents(name, RefNames.REFS_CONFIG, null, head);
 
       eventRecorder.assertRefUpdatedEvents(name, "refs/heads/master", new String[] {});
-      projectIndexedCounter.assertReindexOf(name);
+
+      projectIndexedCounter.assertReindexOf(name, 1);
     }
   }
 
@@ -149,7 +150,8 @@ public class ProjectIT extends AbstractDaemonTest {
       eventRecorder.assertRefUpdatedEvents(name, RefNames.REFS_CONFIG, null, head);
 
       eventRecorder.assertRefUpdatedEvents(name, "refs/heads/main", new String[] {});
-      projectIndexedCounter.assertReindexOf(name);
+
+      projectIndexedCounter.assertReindexOf(name, 1);
     }
   }
 
@@ -179,7 +181,7 @@ public class ProjectIT extends AbstractDaemonTest {
       head = getRemoteHead(name, "refs/heads/master");
       eventRecorder.assertRefUpdatedEvents(name, "refs/heads/master", null, head);
 
-      projectIndexedCounter.assertReindexOf(name);
+      projectIndexedCounter.assertReindexOf(name, 1);
     }
   }
 

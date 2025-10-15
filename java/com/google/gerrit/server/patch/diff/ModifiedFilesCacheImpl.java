@@ -24,6 +24,7 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.patch.DiffNotAvailableException;
 import com.google.gerrit.server.patch.DiffUtil;
@@ -59,6 +60,7 @@ import org.eclipse.jgit.revwalk.RevWalk;
 public class ModifiedFilesCacheImpl implements ModifiedFilesCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @SkipCacheReplication
   private static final String MODIFIED_FILES = "modified_files";
 
   private final LoadingCache<ModifiedFilesCacheKey, ImmutableList<ModifiedFile>> cache;

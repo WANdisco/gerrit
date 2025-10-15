@@ -243,7 +243,11 @@ public class ExternalIdNotes extends VersionedMetaData {
 
     @Override
     protected void reindexAccount(Account.Id id) {
-      accountIndexer.get().index(id);
+      try {
+        accountIndexer.get().index(id);
+      } catch (IOException e) {
+        logger.atWarning().log("Unable to re-index Account %s: %s", id, e.getMessage());
+      }
     }
   }
 

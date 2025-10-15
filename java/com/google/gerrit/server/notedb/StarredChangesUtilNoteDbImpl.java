@@ -315,8 +315,9 @@ public class StarredChangesUtilNoteDbImpl implements StarredChangesUtil {
             return;
           case LOCK_FAILURE:
             throw new LockFailureException(String.format("Delete star ref %s failed", refName), u);
-          case NEW:
           case NO_CHANGE:
+            return; /* Cirata replication: idempotence, no-op */
+          case NEW:
           case FAST_FORWARD:
           case IO_FAILURE:
           case NOT_ATTEMPTED:

@@ -22,6 +22,7 @@ import com.google.gerrit.entities.AccountGroup;
 import com.google.gerrit.entities.GroupReference;
 import com.google.gerrit.entities.InternalGroup;
 import com.google.gerrit.exceptions.DuplicateKeyException;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import com.google.gerrit.git.RefUpdateUtil;
 import com.google.gerrit.server.GerritPersonIdent;
 import com.google.gerrit.server.Sequence;

@@ -52,6 +52,8 @@ import com.google.gerrit.pgm.http.jetty.JettyEnv;
 import com.google.gerrit.pgm.http.jetty.JettyModule;
 import com.google.gerrit.pgm.http.jetty.ProjectQoSFilter.ProjectQoSFilterModule;
 import com.google.gerrit.pgm.util.ErrorLogFile;
+import com.google.gerrit.server.replication.configuration.AllowReplication;
+import com.google.gerrit.server.util.GuiceUtils;
 import com.google.gerrit.pgm.util.LogFileCompressor.LogFileCompressorModule;
 import com.google.gerrit.pgm.util.RuntimeShutdown;
 import com.google.gerrit.pgm.util.SiteProgram;
@@ -109,6 +111,10 @@ import com.google.gerrit.server.permissions.DefaultPermissionBackendModule;
 import com.google.gerrit.server.plugins.PluginGuiceEnvironment;
 import com.google.gerrit.server.plugins.PluginModule;
 import com.google.gerrit.server.project.DefaultProjectNameLockManager.DefaultProjectNameLockManagerModule;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
+import com.google.gerrit.server.replication.modules.ReplicationModule;
 import com.google.gerrit.server.restapi.RestApiModule;
 import com.google.gerrit.server.schema.JdbcAccountPatchReviewStore.JdbcAccountPatchReviewStoreModule;
 import com.google.gerrit.server.schema.NoteDbSchemaVersionCheck;
@@ -255,6 +261,10 @@ public class Daemon extends SiteProgram {
     this.replica = replica;
   }
 
+  /* N.B: This property relates to Vanilla Gerrit's notion of a replica
+   * and has no relation to Cirata replication. See 'Replica' in
+   * Documentation/glossary.txt for an explanation.
+   */
   public boolean isReplica() {
     return replica;
   }
@@ -300,8 +310,11 @@ public class Daemon extends SiteProgram {
             logger.atInfo().log("caught shutdown, cleaning up");
             stop();
           });
-
       logger.atInfo().log("Gerrit Code Review %s ready", myVersion());
+
+      // Signal all waiting contexts that we are up and running
+      LifecycleManager.started();
+
       if (runId != null) {
         try {
           Files.write(runFile, (runId + "\n").getBytes(UTF_8));
@@ -379,15 +392,26 @@ public class Daemon extends SiteProgram {
 
   @VisibleForTesting
   public void start() throws IOException {
+
     if (dbInjector == null) {
+      // Enable replication for the main Daemon entrypoint, if someone is doing some testing forcing the use
+      // of no replication - they can use the override, or put this value into the gerrit config,
+      // ( although this isn't recommended, as its a persistent value which would be picked up across entrypoints ).
+      AllowReplication.setReplicationDisabled_DefaultBehaviour(false);
+
       dbInjector = createDbInjector(true /* enableMetrics */);
     }
+
+    // Get the cfgInjector from the dbInjector and set the default, before cfgInjector
+    // seperate class is created.
     cfgInjector = createCfgInjector();
     config = cfgInjector.getInstance(Key.get(Config.class, GerritServerConfig.class));
     config.setBoolean("container", null, "replica", replica);
+
     indexType = IndexModule.getIndexType(cfgInjector);
     sysInjector = createSysInjector();
     sysInjector.getInstance(PluginGuiceEnvironment.class).setDbCfgInjector(dbInjector, cfgInjector);
+    sysInjector.getInstance(ReplicatedEventsCoordinator.class).setSysInjector(sysInjector);
     manager.add(dbInjector, cfgInjector, sysInjector);
 
     manager.add(ErrorLogFile.start(getSitePath(), config, consoleLog));
@@ -402,6 +426,7 @@ public class Daemon extends SiteProgram {
     }
 
     manager.start();
+
   }
 
   @VisibleForTesting
@@ -439,6 +464,12 @@ public class Daemon extends SiteProgram {
 
   private Injector createCfgInjector() {
     final List<Module> modules = new ArrayList<>();
+
+    // Only bind this module if it is not an InMemory test and we haven't already bound the class
+    if(!inMemoryTest && !GuiceUtils.hasBinding(dbInjector, ReplicatedConfiguration.class)) {
+      modules.add(new ReplicatedConfiguration.Module());
+    }
+
     modules.add(new AuthConfigModule());
     return dbInjector.createChildInjector(modules);
   }
@@ -463,6 +494,19 @@ public class Daemon extends SiteProgram {
     } else {
       modules.add(new JdbcAccountPatchReviewStoreModule(config));
     }
+
+    if(!inMemoryTest) {
+      /** Add all replication modules now */
+      ReplicatedConfiguration replicatedConfiguration =
+          cfgInjector.getInstance(ReplicatedConfiguration.class);
+      if (!replicatedConfiguration.getAllowReplication().isReplicationEnabled()) {
+          //if replication is disabled then use the dummy module
+          modules.add(new NonReplicatedCoordinatorModule());
+      } else {
+          modules.add(new ReplicationModule());
+      }
+    }
+
     modules.add(new SysExecutorModule());
     modules.add(new DiffExecutorModule());
     modules.add(new MimeUtil2Module());

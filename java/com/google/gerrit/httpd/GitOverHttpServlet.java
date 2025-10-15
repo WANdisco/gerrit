@@ -34,6 +34,7 @@ import com.google.gerrit.server.RequestInfo;
 import com.google.gerrit.server.RequestListener;
 import com.google.gerrit.server.audit.HttpAuditEvent;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.git.PermissionAwareRepositoryManager;
 import com.google.gerrit.server.git.TracingHook;
@@ -50,6 +51,7 @@ import com.google.gerrit.server.permissions.ProjectPermission;
 import com.google.gerrit.server.plugincontext.PluginSetContext;
 import com.google.gerrit.server.project.ProjectCache;
 import com.google.gerrit.server.project.ProjectState;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.server.util.time.TimeUtil;
 import com.google.inject.AbstractModule;
 import com.google.inject.Inject;
@@ -101,10 +103,11 @@ import org.eclipse.jgit.transport.resolver.UploadPackFactory;
 /** Serves Git repositories over HTTP. */
 @Singleton
 public class GitOverHttpServlet extends GitServlet {
-  private static final long serialVersionUID = 1L;
 
+  private static final long serialVersionUID = 1L;
   private static final String ATT_STATE = ProjectState.class.getName();
   private static final String ATT_ARC = AsyncReceiveCommits.class.getName();
+  @ReplicatedCache
   private static final String ID_CACHE = "adv_bases";
 
   public static final String URL_REGEX;
@@ -568,8 +571,11 @@ public class GitOverHttpServlet extends GitServlet {
         Provider<CurrentUser> userProvider,
         GroupAuditService groupAuditService,
         Metrics metrics,
-        Provider<WebSession> sessionProvider) {
-      this.cache = cache;
+        Provider<WebSession> sessionProvider,
+        ReplicatedEventsCoordinator replicatedEventsCoordinator ) {
+      // Using a ReplicatedCacheImpl here instead of a ReplicatedLoadingCacheImpl as the underlying cache instance provided at runtime
+      // is a CaffeinatedGuavaCache and cannot be cast to a LoadingCache
+      this.cache = replicatedEventsCoordinator.createReplicatedCache(ID_CACHE, cache, value -> value.project().get(), AdvertisedObjectsCacheKey.class );
       this.permissionBackend = permissionBackend;
       this.userProvider = userProvider;
       this.groupAuditService = groupAuditService;

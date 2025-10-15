@@ -49,6 +49,10 @@ public class EventJsonTest {
   private static final double TS1 = 1.2543444E9;
   private static final double TS2 = 1.254344401E9;
   private static final String URL = "http://somewhere.com";
+  private static final long EVENT_NANO_TIME = 2616261166120L;
+  private static final long EVENT_TIMESTAMP = 1602578858467L;
+  private static final double EVENT_NANO_TIME_SCI = 2.61626116612E12;
+  private static final double EVENT_TIMESTAMP_SCI = 1.602578858467E12;
 
   private final Gson gson = new EventGsonProvider().get();
 
@@ -79,15 +83,19 @@ public class EventJsonTest {
 
   @Test
   public void customEventSimulateClassloaderIssue() {
-    EventTypes.register(CustomEvent.TYPE, CustomEvent.class);
-    CustomEvent event = new CustomEvent();
-    event.customField = "customValue";
-    // Need to serialise using the Event interface instead of json.getClass()
-    // for simulating the serialisation of an object owned by another class loader
-    String json = gson.toJson(event, Event.class);
-    CustomEvent resullt = gson.fromJson(json, CustomEvent.class);
-    assertThat(resullt.type).isEqualTo(CustomEvent.TYPE);
-    assertThat(resullt.customField).isEqualTo(event.customField);
+    try {
+      EventTypes.register(CustomEvent.TYPE, CustomEvent.class);
+      CustomEvent event = new CustomEvent();
+      event.customField = "customValue";
+      // Need to serialise using the Event interface instead of json.getClass()
+      // for simulating the serialisation of an object owned by another class loader
+      String json = gson.toJson(event, Event.class);
+      CustomEvent resullt = gson.fromJson(json, CustomEvent.class);
+      assertThat(resullt.type).isEqualTo(CustomEvent.TYPE);
+      assertThat(resullt.customField).isEqualTo(event.customField);
+    } finally {
+      EventTypes.unregister(CustomEvent.TYPE);
+    }
   }
 
   @Test
@@ -98,6 +106,8 @@ public class EventJsonTest {
     refUpdatedAttribute.refName = REF;
     event.refUpdate = createSupplier(refUpdatedAttribute);
     event.submitter = newAccount("submitter");
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -112,6 +122,8 @@ public class EventJsonTest {
                 .put("refUpdate", ImmutableMap.of("refName", REF))
                 .put("type", "ref-updated")
                 .put("eventCreatedOn", TS1)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -128,6 +140,8 @@ public class EventJsonTest {
     event.refUpdates =
         createSupplier(ImmutableList.of(refUpdatedAttribute, metaRefUpdatedAttribute));
     event.submitter = newAccount("submitter");
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -146,6 +160,8 @@ public class EventJsonTest {
                         ImmutableMap.of("refName", metaRefName)))
                 .put("type", "batch-ref-updated")
                 .put("eventCreatedOn", TS1)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -155,6 +171,8 @@ public class EventJsonTest {
     PatchSetCreatedEvent event = new PatchSetCreatedEvent(change);
     event.change = asChangeAttribute(change);
     event.uploader = newAccount("uploader");
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -183,6 +201,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "patchset-created")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -192,6 +212,8 @@ public class EventJsonTest {
     ChangeDeletedEvent event = new ChangeDeletedEvent(change);
     event.change = asChangeAttribute(change);
     event.deleter = newAccount("deleter");
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -220,6 +242,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "change-deleted")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -232,6 +256,8 @@ public class EventJsonTest {
     event.added = new String[] {"added"};
     event.removed = new String[] {"removed"};
     event.hashtags = new String[] {"hashtags"};
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -263,6 +289,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "hashtags-changed")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -273,6 +301,8 @@ public class EventJsonTest {
     event.change = asChangeAttribute(change);
     event.abandoner = newAccount("abandoner");
     event.reason = "some reason";
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -302,6 +332,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "change-abandoned")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -310,6 +342,8 @@ public class EventJsonTest {
     Change change = newChange();
     ChangeMergedEvent event = new ChangeMergedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -331,6 +365,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "change-merged")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -339,6 +375,8 @@ public class EventJsonTest {
     Change change = newChange();
     ChangeRestoredEvent event = new ChangeRestoredEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -360,6 +398,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "change-restored")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -368,6 +408,8 @@ public class EventJsonTest {
     Change change = newChange();
     CommentAddedEvent event = new CommentAddedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -389,6 +431,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "comment-added")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -397,6 +441,8 @@ public class EventJsonTest {
     Change change = newChange();
     PrivateStateChangedEvent event = new PrivateStateChangedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -418,6 +464,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "private-state-changed")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -426,6 +474,8 @@ public class EventJsonTest {
     Change change = newChange();
     ReviewerAddedEvent event = new ReviewerAddedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -447,6 +497,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "reviewer-added")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -455,6 +507,8 @@ public class EventJsonTest {
     Change change = newChange();
     ReviewerDeletedEvent event = new ReviewerDeletedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -476,6 +530,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "reviewer-deleted")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -484,6 +540,8 @@ public class EventJsonTest {
     Change change = newChange();
     VoteDeletedEvent event = new VoteDeletedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -505,6 +563,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "vote-deleted")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -513,6 +573,8 @@ public class EventJsonTest {
     Change change = newChange();
     WorkInProgressStateChangedEvent event = new WorkInProgressStateChangedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -534,6 +596,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "wip-state-changed")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -542,6 +606,8 @@ public class EventJsonTest {
     Change change = newChange();
     TopicChangedEvent event = new TopicChangedEvent(change);
     event.change = asChangeAttribute(change);
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -563,6 +629,8 @@ public class EventJsonTest {
                 .put("changeKey", map("id", CHANGE_ID))
                 .put("type", "topic-changed")
                 .put("eventCreatedOn", TS2)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -571,6 +639,8 @@ public class EventJsonTest {
     ProjectCreatedEvent event = new ProjectCreatedEvent();
     event.projectName = PROJECT;
     event.headName = REF;
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -579,6 +649,8 @@ public class EventJsonTest {
                 .put("headName", REF)
                 .put("type", "project-created")
                 .put("eventCreatedOn", TS1)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 
@@ -588,6 +660,8 @@ public class EventJsonTest {
     event.projectName = PROJECT;
     event.oldHead = "refs/heads/master";
     event.newHead = REF;
+    event.setEventTimestamp(EVENT_TIMESTAMP);
+    event.setEventNanoTime(EVENT_NANO_TIME);
 
     assertThatJsonMap(event)
         .isEqualTo(
@@ -597,6 +671,8 @@ public class EventJsonTest {
                 .put("newHead", REF)
                 .put("type", "project-head-updated")
                 .put("eventCreatedOn", TS1)
+                .put("eventNanoTime", EVENT_NANO_TIME_SCI)
+                .put("eventTimestamp", EVENT_TIMESTAMP_SCI)
                 .build());
   }
 

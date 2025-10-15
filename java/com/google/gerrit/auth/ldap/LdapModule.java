@@ -21,6 +21,7 @@ import com.google.gerrit.extensions.registration.DynamicSet;
 import com.google.gerrit.server.account.GroupBackend;
 import com.google.gerrit.server.account.Realm;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.inject.Scopes;
 import com.google.inject.TypeLiteral;
 import java.time.Duration;
@@ -28,9 +29,13 @@ import java.util.Optional;
 import java.util.Set;
 
 public class LdapModule extends CacheModule {
+  @SkipCacheReplication
   static final String USERNAME_CACHE = "ldap_usernames";
+  @SkipCacheReplication
   static final String GROUP_CACHE = "ldap_groups";
+  @SkipCacheReplication
   static final String GROUP_EXIST_CACHE = "ldap_group_existence";
+  @SkipCacheReplication
   static final String PARENT_GROUPS_CACHE = "ldap_groups_byinclude";
 
   @Override

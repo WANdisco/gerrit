@@ -1300,7 +1300,8 @@ public class RefControlTest {
   }
 
   private static class MockUser extends CurrentUser {
-    @Nullable private final String username;
+    @Nullable
+    private final String username;
     private final GroupMembership groups;
 
     MockUser(@Nullable String name, AccountGroup.UUID[] groupId) {

@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gerrit.entities.Patch;
 import com.google.gerrit.proto.Protos;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.cache.proto.Cache.ModifiedFilesProto;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
 import com.google.gerrit.server.git.GitRepositoryManager;
@@ -47,6 +48,7 @@ import org.eclipse.jgit.util.io.DisabledOutputStream;
 /** Implementation of the {@link GitModifiedFilesCache} */
 @Singleton
 public class GitModifiedFilesCacheImpl implements GitModifiedFilesCache {
+  @SkipCacheReplication
   private static final String GIT_MODIFIED_FILES = "git_modified_files";
   private static final ImmutableMap<ChangeType, Patch.ChangeType> changeTypeMap =
       ImmutableMap.of(

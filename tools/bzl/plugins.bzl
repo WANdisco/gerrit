@@ -14,8 +14,12 @@ CORE_PLUGINS = [
 
 CUSTOM_PLUGINS = [
     # Add custom core plugins here
+    "lfs",
+    "its-base",
+    "its-jira",
 ]
 
 CUSTOM_PLUGINS_TEST_DEPS = [
     # Add custom core plugins with tests deps here
+    "its-jira",
 ]

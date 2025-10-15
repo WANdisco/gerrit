@@ -1,0 +1,2 @@
+# Keep CRLF line-endings for Windows batch script.
+mvnw.cmd eol=crlf

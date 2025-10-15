@@ -31,6 +31,7 @@ import com.google.gerrit.server.cache.CacheModule;
 import com.google.gerrit.server.cache.proto.Cache.MergeabilityKeyProto;
 import com.google.gerrit.server.cache.serialize.BooleanCacheSerializer;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
+import com.google.gerrit.server.cache.SkipCacheReplication;
 import com.google.gerrit.server.cache.serialize.ObjectIdConverter;
 import com.google.gerrit.server.git.CodeReviewCommit;
 import com.google.gerrit.server.git.CodeReviewCommit.CodeReviewRevWalk;
@@ -52,6 +53,7 @@ import org.eclipse.jgit.revwalk.RevCommit;
 public class MergeabilityCacheImpl implements MergeabilityCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @SkipCacheReplication
   private static final String CACHE_NAME = "mergeability";
 
   public static Module module() {

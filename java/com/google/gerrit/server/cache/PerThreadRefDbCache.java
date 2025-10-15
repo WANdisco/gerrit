@@ -27,7 +27,7 @@ public class PerThreadRefDbCache {
       PerThreadCache.Key.create(PerThreadRefDbCache.class);
 
   public static RefDatabase getRefDatabase(File path, RefDatabase refDb) {
-    if (PerThreadCache.get() != null) {
+    if (PerThreadCache.get() != null && refDb instanceof RefDirectory) {
       return PerThreadCache.get()
           .get(REFDB_CACHE_KEY, PerThreadRefDbCache::new)
           .computeIfAbsent(path, p -> ((RefDirectory) refDb).createSnapshottingRefDirectory());

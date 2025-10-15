@@ -24,6 +24,7 @@ from sys import stderr
 from util import hash_file, resolve_url
 from zipfile import ZipFile, BadZipfile, LargeZipFile
 
+CURRENT_LOCATION = path.dirname(path.realpath(__file__))
 GERRIT_HOME = path.expanduser('~/.gerritcodereview')
 CACHE_DIR = environ.get(
     'GERRIT_CACHE_HOME',
@@ -46,8 +47,10 @@ def download_properties(root_dir):
     """ Get the download properties.
 
     First tries to find the properties file in the given root directory,
-    and if not found there, tries in the Gerrit settings folder in the
-    user's home directory.
+       and if not found there,
+    Second tries in the Gerrit settings folder in the user's home directory,
+       and if not found there,
+    Finally tries in the current execution path for gerrit build.
 
     Returns a set of download properties, which may be empty.
 
@@ -56,6 +59,10 @@ def download_properties(root_dir):
     local_prop = path.join(root_dir, LOCAL_PROPERTIES)
     if not path.isfile(local_prop):
         local_prop = path.join(GERRIT_HOME, LOCAL_PROPERTIES)
+    if not path.isfile(local_prop):
+        gerrit_workspace = path.join(CURRENT_LOCATION, "../", 'WORKSPACE')
+        if path.isfile(gerrit_workspace):
+          local_prop = path.join(CURRENT_LOCATION, "../", LOCAL_PROPERTIES)
     if path.isfile(local_prop):
         try:
             with open(local_prop) as fd:

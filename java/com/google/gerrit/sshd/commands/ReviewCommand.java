@@ -41,6 +41,7 @@ import com.google.gerrit.server.config.AllProjectsName;
 import com.google.gerrit.server.project.NoSuchChangeException;
 import com.google.gerrit.server.project.ProjectCache;
 import com.google.gerrit.server.project.ProjectState;
+import com.google.gerrit.server.restapi.change.Submit;
 import com.google.gerrit.server.update.RetryHelper;
 import com.google.gerrit.server.update.RetryableAction.ActionType;
 import com.google.gerrit.server.util.LabelVote;
@@ -230,6 +231,10 @@ public class ReviewCommand extends SshCommand {
         } else {
           reviewPatchSet(patchSet);
         }
+      } catch (Submit.SubmitException e) {
+        ok = false;
+        writeError("error", e.getMessage() + "\n");
+        logger.atSevere().withCause(e).log("submit error while reviewing %s", patchSet.id());
       } catch (RestApiException | UnloggedFailure e) {
         ok = false;
         writeError("error", e.getMessage() + "\n");

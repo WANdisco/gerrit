@@ -30,6 +30,7 @@ import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.exceptions.StorageException;
 import com.google.gerrit.proto.Protos;
 import com.google.gerrit.server.cache.CacheModule;
+import com.google.gerrit.server.cache.ReplicatedCache;
 import com.google.gerrit.server.cache.proto.Cache;
 import com.google.gerrit.server.cache.serialize.CacheSerializer;
 import com.google.gerrit.server.cache.serialize.ObjectIdConverter;
@@ -42,6 +43,9 @@ import com.google.gerrit.server.logging.Metadata;
 import com.google.gerrit.server.logging.TraceContext;
 import com.google.gerrit.server.logging.TraceContext.TraceTimer;
 import com.google.gerrit.server.query.group.InternalGroupQuery;
+import com.google.gerrit.server.replication.ReplicatedCacheImpl;
+import com.google.gerrit.server.replication.ReplicatedLoadingCacheImpl;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Provider;
@@ -62,25 +66,34 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
 
-/** Tracks group objects in memory for efficient access. */
+/**
+ * Tracks group objects in memory for efficient access.
+ */
 @Singleton
 public class GroupCacheImpl implements GroupCache {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @ReplicatedCache
   private static final String BYID_NAME = "groups";
+  @ReplicatedCache
   private static final String BYNAME_NAME = "groups_byname";
+  @ReplicatedCache
   private static final String BYUUID_NAME = "groups_byuuid";
+  @ReplicatedCache
   private static final String BYUUID_NAME_PERSISTED = "groups_byuuid_persisted";
+
 
   public static Module module() {
     return new CacheModule() {
       @Override
       protected void configure() {
-        cache(BYID_NAME, AccountGroup.Id.class, new TypeLiteral<Optional<InternalGroup>>() {})
+        cache(BYID_NAME, AccountGroup.Id.class, new TypeLiteral<Optional<InternalGroup>>() {
+        })
             .maximumWeight(Long.MAX_VALUE)
             .loader(ByIdLoader.class);
 
-        cache(BYNAME_NAME, String.class, new TypeLiteral<Optional<InternalGroup>>() {})
+        cache(BYNAME_NAME, String.class, new TypeLiteral<Optional<InternalGroup>>() {
+        })
             .maximumWeight(Long.MAX_VALUE)
             .loader(ByNameLoader.class);
 
@@ -131,12 +144,19 @@ public class GroupCacheImpl implements GroupCache {
       @Named(BYNAME_NAME) LoadingCache<String, Optional<InternalGroup>> byName,
       @Named(BYUUID_NAME) LoadingCache<String, Optional<InternalGroup>> byUUID,
       @Named(BYUUID_NAME_PERSISTED)
-          LoadingCache<Cache.GroupKeyProto, InternalGroup> persistedByUuidCache) {
-    this.byId = byId;
-    this.byName = byName;
-    this.byUUID = byUUID;
-    this.persistedByUuidCache = persistedByUuidCache;
+          LoadingCache<Cache.GroupKeyProto, InternalGroup> persistedByUuidCache,
+      ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+    this.byId = replicatedEventsCoordinator.createReplicatedLoadingCache(BYID_NAME, byId,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName(), AccountGroup.Id.class);
+    this.byName = replicatedEventsCoordinator.createReplicatedLoadingCache(BYNAME_NAME, byName,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName(), String.class);
+    this.byUUID = replicatedEventsCoordinator.createReplicatedLoadingCache(BYUUID_NAME, byUUID,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName(), String.class);
+    this.persistedByUuidCache =
+        replicatedEventsCoordinator.createReplicatedLoadingCache(BYUUID_NAME_PERSISTED, persistedByUuidCache,
+            replicatedEventsCoordinator.getReplicatedConfiguration().getAllUsersName(), Cache.GroupKeyProto.class);
   }
+
 
   @Override
   public Optional<InternalGroup> get(AccountGroup.Id groupId) {
@@ -229,6 +249,20 @@ public class GroupCacheImpl implements GroupCache {
   }
 
   @Override
+  public void evict(AccountGroup.UUID groupUuid, boolean shouldReplicate) {
+    if (groupUuid != null) {
+      logger.atFine().log("Evict group %s by UUID", groupUuid.get());
+      // If shouldReplicate is false then we don't want to queue this for replication and instead call our invalidateNoRepl impl.
+      if (!shouldReplicate && byUUID instanceof ReplicatedCacheImpl<?, ?>) {
+        ReplicatedLoadingCacheImpl<?, ?> replicatedByUuid = (ReplicatedLoadingCacheImpl<?, ?>) byUUID;
+        replicatedByUuid.invalidateNoRepl(groupUuid.get());
+        return;
+      }
+      byUUID.invalidate(groupUuid.get());
+    }
+  }
+
+  @Override
   public void evict(Collection<AccountGroup.UUID> groupUuids) {
     if (groupUuids != null && !groupUuids.isEmpty()) {
       logger.atFine().log("Evict groups %s by UUID", groupUuids);
@@ -282,8 +316,9 @@ public class GroupCacheImpl implements GroupCache {
         @Named(BYUUID_NAME_PERSISTED)
             LoadingCache<Cache.GroupKeyProto, InternalGroup> persistedCache,
         GitRepositoryManager repoManager,
-        AllUsersName allUsersName) {
-      this.persistedCache = persistedCache;
+        AllUsersName allUsersName, ReplicatedEventsCoordinator replicatedEventsCoordinator) {
+      this.persistedCache = replicatedEventsCoordinator.createReplicatedLoadingCache(BYUUID_NAME_PERSISTED,
+              persistedCache, allUsersName.get(),Cache.GroupKeyProto.class);
       this.repoManager = repoManager;
       this.allUsersName = allUsersName;
     }

@@ -24,6 +24,7 @@ import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.notedb.RepoSequence;
 import com.google.gerrit.server.notedb.RepoSequence.RepoSequenceModule;
+import com.google.gerrit.server.replication.configuration.ReplicatedConfiguration;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
@@ -48,26 +49,30 @@ public class SequencesOnInit {
     private final GitRepositoryManager repoManager;
     private final AllUsersName allUsers;
     private final Config cfg;
+    private final ReplicatedConfiguration replicatedConfiguration;
 
     @Inject
     DisabledGitRefUpdatedRepoAccountsSequenceProvider(
         @GerritServerConfig Config cfg,
         GitRepositoryManagerOnInit repoManager,
-        AllUsersName allUsersName) {
+        AllUsersName allUsersName,
+        ReplicatedConfiguration replicatedConfiguration) {
       this.repoManager = repoManager;
       this.allUsers = allUsersName;
       this.cfg = cfg;
+      this.replicatedConfiguration = replicatedConfiguration;
     }
 
     @Override
     public Sequence get() {
       int accountBatchSize =
           cfg.getInt(
-              RepoSequenceModule.SECTION_NOTE_DB,
+              Sequences.SECTION_NOTE_DB,
               Sequence.NAME_ACCOUNTS,
               RepoSequenceModule.KEY_SEQUENCE_BATCH_SIZE,
               RepoSequenceModule.DEFAULT_ACCOUNTS_SEQUENCE_BATCH_SIZE);
       return new RepoSequence(
+          replicatedConfiguration,
           repoManager,
           GitReferenceUpdated.DISABLED,
           allUsers,

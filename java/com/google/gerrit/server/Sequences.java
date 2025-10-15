@@ -25,13 +25,17 @@ import com.google.gerrit.metrics.Field;
 import com.google.gerrit.metrics.MetricMaker;
 import com.google.gerrit.metrics.Timer2;
 import com.google.gerrit.server.Sequence.SequenceType;
+import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.logging.Metadata;
+import com.google.gerrit.server.notedb.RepoSequence;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
+import org.eclipse.jgit.lib.Config;
 
 @Singleton
 public class Sequences {
+  public static final String SECTION_NOTE_DB = "noteDb";
   public static final int FIRST_CHANGE_ID = 1;
   public static final int FIRST_GROUP_ID = 1;
   public static final int FIRST_ACCOUNT_ID = 1000000;
@@ -41,8 +45,12 @@ public class Sequences {
   private final Sequence groupSeq;
   private final Timer2<SequenceType, Boolean> nextIdLatency;
 
+  private static final String SEQUENCE_RETRY_MAX_TIMEOUT_SECS = "sequenceRetryMaxTimeoutSecs";
+  private static final int DEFAULT_SEQUENCE_RETRY_MAX_TIMEOUT_SECS = 30;
+
   @Inject
   public Sequences(
+      @GerritServerConfig Config cfg,
       MetricMaker metrics,
       @Named(NAME_ACCOUNTS) Sequence accountsSeq,
       @Named(NAME_GROUPS) Sequence groupsSeq,
@@ -50,6 +58,11 @@ public class Sequences {
     this.accountSeq = accountsSeq;
     this.groupSeq = groupsSeq;
     this.changeSeq = changesSeq;
+
+    // TODO(smh): After sequence refactoring, wondering if this should move into RepoSequence alongside the initialisation
+    //   of each sequence? (Would mean RepoSequence needs the Config injection also.)
+    int sequenceRetryMaxTimeoutSecs = cfg.getInt(SECTION_NOTE_DB, SEQUENCE_RETRY_MAX_TIMEOUT_SECS, DEFAULT_SEQUENCE_RETRY_MAX_TIMEOUT_SECS);
+    RepoSequence.setSequenceRetryMaxTimeoutSecs(sequenceRetryMaxTimeoutSecs);
 
     nextIdLatency =
         metrics.newTimer(

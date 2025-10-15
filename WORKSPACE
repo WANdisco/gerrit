@@ -26,7 +26,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
-load("//tools/bzl:maven_jar.bzl", "GERRIT", "MAVEN_LOCAL", "maven_jar")
+load("//tools/bzl:maven_jar.bzl", "GERRIT", "MAVEN_LOCAL", "WANDISCO_ASSETS", "maven_jar")
 load("//plugins:external_plugin_deps.bzl", "external_plugin_deps")
 load("//tools:nongoogle.bzl", "declare_nongoogle_deps")
 load("//tools:deps.bzl", "CAFFEINE_VERS", "java_dependencies")

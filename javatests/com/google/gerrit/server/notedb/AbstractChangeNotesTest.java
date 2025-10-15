@@ -65,6 +65,8 @@ import com.google.gerrit.server.group.SystemGroupBackend;
 import com.google.gerrit.server.project.NullProjectCache;
 import com.google.gerrit.server.project.ProjectCache;
 import com.google.gerrit.server.query.change.InternalChangeQuery;
+import com.google.gerrit.server.replication.TestingReplicatedEventsCoordinator;
+import com.google.gerrit.server.replication.coordinators.ReplicatedEventsCoordinator;
 import com.google.gerrit.server.util.time.TimeUtil;
 import com.google.gerrit.testing.AssertableExecutorService;
 import com.google.gerrit.testing.ConfigSuite;
@@ -76,6 +78,7 @@ import com.google.inject.Guice;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Module;
+import com.google.inject.Scopes;
 import com.google.inject.TypeLiteral;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -223,6 +226,7 @@ public abstract class AbstractChangeNotesTest {
             bind(PatchSetApprovalUuidGenerator.class).to(TestPatchSetApprovalUuidGenerator.class);
             bind(ChangeDraftUpdate.ChangeDraftUpdateFactory.class)
                 .to(ChangeDraftNotesUpdate.Factory.class);
+            bind(ReplicatedEventsCoordinator.class).to(TestingReplicatedEventsCoordinator.class).in(Scopes.SINGLETON);
           }
         });
   }

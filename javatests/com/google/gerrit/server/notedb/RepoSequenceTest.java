@@ -15,6 +15,9 @@
 package com.google.gerrit.server.notedb;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.gerrit.server.replication.configuration.ReplicationConstants.GERRIT_EVENTS_BACKOFF_CEILING_PERIOD;
+import static com.google.gerrit.server.replication.configuration.ReplicationConstants.GERRIT_EVENTS_BACKOFF_INITIAL_PERIOD;
+import static com.google.gerrit.server.replication.configuration.ReplicationConstants.GERRIT_MAX_NUM_EVENTS_RETRIES;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static com.google.gerrit.testing.GerritJUnit.assertThrows;
 import static com.google.gerrit.testing.TestActionRefUpdateContext.testRefAction;
@@ -32,13 +35,16 @@ import com.google.gerrit.entities.Project;
 import com.google.gerrit.entities.RefNames;
 import com.google.gerrit.exceptions.StorageException;
 import com.google.gerrit.server.extensions.events.GitReferenceUpdated;
+import com.google.gerrit.server.replication.AbstractReplicationSetup;
 import com.google.gerrit.testing.InMemoryRepositoryManager;
 import java.io.IOException;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
 import org.eclipse.jgit.junit.TestRepository;
 import org.eclipse.jgit.lib.ObjectId;
@@ -47,10 +53,11 @@ import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 
-public class RepoSequenceTest {
+public class RepoSequenceTest extends AbstractReplicationSetup {
   @Rule public final Expect expect = Expect.create();
 
   // Don't sleep in tests.
@@ -59,6 +66,12 @@ public class RepoSequenceTest {
 
   private InMemoryRepositoryManager repoManager;
   private Project.NameKey project;
+
+  @BeforeClass
+  public static void beforeClass() throws Exception {
+
+    AbstractReplicationSetup.setupReplicatedEventsCoordinatorProps();
+  }
 
   @Before
   public void setUp() throws Exception {
@@ -368,6 +381,7 @@ public class RepoSequenceTest {
       Runnable afterReadRef,
       Retryer<ImmutableList<Integer>> retryer) {
     return new RepoSequence(
+        dummyTestCoordinator.getReplicatedConfiguration(),
         repoManager,
         GitReferenceUpdated.DISABLED,
         project,

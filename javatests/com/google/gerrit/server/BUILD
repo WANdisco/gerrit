@@ -44,6 +44,7 @@ junit_tests(
         "//java/com/google/gerrit/git",
         "//java/com/google/gerrit/index",
         "//java/com/google/gerrit/index:query_exception",
+        "//java/com/google/gerrit/index/project",
         "//java/com/google/gerrit/index/testing",
         "//java/com/google/gerrit/jgit",
         "//java/com/google/gerrit/json",
@@ -86,9 +87,12 @@ junit_tests(
         "//lib/guice",
         "//lib/mockito",
         "//lib/truth",
+        '//lib/equalsverifier:equalsverifier',
         "//lib/truth:truth-java8-extension",
         "//lib/truth:truth-proto-extension",
         "//proto:cache_java_proto",
         "//proto:entities_java_proto",
+        "@gerrit-gitms-shared//jar",
+        "@reflections//jar"
     ],
 )

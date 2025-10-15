@@ -467,13 +467,16 @@ public class AccountManager {
       throws AccountException, IOException, ConfigInvalidException {
     Optional<ExternalId> optionalExtId = externalIds.get(who.getExternalIdKey());
     if (optionalExtId.isPresent()) {
+      logger.atInfo().log("Link another authentication identity to an existing account");
       ExternalId extId = optionalExtId.get();
       if (!extId.accountId().equals(to)) {
         throw new AccountException(
             "Identity '" + extId.key().get() + "' in use by another account");
       }
+      logger.atInfo().log("Updating existing external ID data");
       update(who, extId);
     } else {
+      logger.atInfo().log("Linking new external ID to the existing account");
       ExternalId newExtId =
           externalIdFactory.createWithEmail(who.getExternalIdKey(), to, who.getEmailAddress());
       checkEmailNotUsed(to, newExtId);

@@ -1,4 +1,17 @@
-// Copyright (C) 2018 The Android Open Source Project
+
+/********************************************************************************
+ * Copyright (c) 2014-2018 WANdisco
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Apache License, Version 2.0
+ *
+ ********************************************************************************/
+
+// Copyright (C) 2012 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +31,7 @@ import com.google.common.base.Supplier;
 import com.google.gerrit.entities.Change;
 import com.google.gerrit.server.data.AccountAttribute;
 
+@isReplicatedServerEvent
 public class ChangeDeletedEvent extends ChangeEvent {
   public static final String TYPE = "change-deleted";
   public Supplier<AccountAttribute> deleter;
@@ -25,4 +39,5 @@ public class ChangeDeletedEvent extends ChangeEvent {
   public ChangeDeletedEvent(Change change) {
     super(TYPE, change);
   }
+
 }

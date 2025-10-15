@@ -372,8 +372,60 @@ public class NoteDbUpdateManager implements AutoCloseable {
                 cu -> cu.getAttentionSetUpdates().stream()));
   }
 
-  private Optional<BatchRefUpdate> execute(
-      OpenRepo or, boolean dryrun, @Nullable PushCertificate pushCert) throws IOException {
+
+  /***
+   * Parepare a full batchRefupdate command for later async execution, with listeners attached etc.
+   * This is a useful method of creating commands for farming out to workers.  used by copyApprovals
+   * iteration to split up work across all projects into a single list of updates to be performed.
+   *
+   * @param or Open repository handle
+   * @param dryrun Indicates whether the updates are a dryRun only and not be really executed.
+   * @param pushCert PushCertificate to be used.
+   * @return A prepared BatchRefUpdate fully created, listeners attached, and ready for execution.
+   *        If no valid commands are supplied, then an Optional.empty() BRU will be returned instead, this matches
+   *        the same Optional responses as the execute methods use.
+   * @throws IOException Throw IOexception when repository IO fails.
+   */
+  private Optional<BatchRefUpdate> prepare(OpenRepo or, boolean dryrun, @Nullable PushCertificate pushCert)
+      throws IOException {
+    if (or == null || or.cmds.isEmpty()) {
+      return Optional.empty();
+    }
+    if (!dryrun) {
+      or.flush();
+    } else {
+      // OpenRepo buffers objects separately; caller may assume that objects are available in the
+      // inserter it previously passed via setChangeRepo.
+      or.flushToFinalInserter();
+    }
+
+    BatchRefUpdate bru = or.repo.getRefDatabase().newBatchUpdate();
+    bru.setPushCertificate(pushCert);
+    if (refLogMessage != null) {
+      bru.setRefLogMessage(refLogMessage, false);
+    } else {
+      bru.setRefLogMessage(
+          firstNonNull(NoteDbUtil.guessRestApiHandler(), "Update NoteDb refs"), false);
+    }
+    bru.setRefLogIdent(refLogIdent != null ? refLogIdent : serverIdent.get());
+    bru.setAtomic(true);
+    or.cmds.addTo(bru);
+    bru.setAllowNonFastForwards(true);
+    for (BatchUpdateListener listener : batchUpdateListeners) {
+      bru = listener.beforeUpdateRefs(bru);
+    }
+
+    return Optional.of(bru);
+  }
+
+  public Optional<BatchRefUpdate> prepare() throws IOException {
+    checkNotExecuted();
+    stage();
+    return prepare(changeRepo, false, pushCert);
+  }
+
+  private Optional<BatchRefUpdate> execute(OpenRepo or, boolean dryrun, @Nullable PushCertificate pushCert)
+      throws IOException {
     if (or == null || or.cmds.isEmpty()) {
       return Optional.empty();
     }

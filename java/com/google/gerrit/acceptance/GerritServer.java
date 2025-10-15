@@ -60,6 +60,7 @@ import com.google.gerrit.pgm.Init;
 import com.google.gerrit.server.config.GerritRuntime;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.config.SitePath;
+import com.google.gerrit.server.replication.modules.NonReplicatedCoordinatorModule;
 import com.google.gerrit.server.experiments.ConfigExperimentFeatures.ConfigExperimentFeaturesModule;
 import com.google.gerrit.server.git.receive.AsyncReceiveCommits.AsyncReceiveCommitsModule;
 import com.google.gerrit.server.git.validators.CommitValidationListener;
@@ -529,7 +530,7 @@ public class GerritServer implements AutoCloseable {
             },
             new ConfigExperimentFeaturesModule()));
     daemon.addAdditionalSysModuleForTesting(
-        new ReindexProjectsAtStartupModule(), new ReindexGroupsAtStartupModule());
+        new ReindexProjectsAtStartupModule(), new ReindexGroupsAtStartupModule(), new NonReplicatedCoordinatorModule());
     daemon.start();
     return new GerritServer(desc, null, createTestInjector(daemon), Optional.of(daemon), null);
   }
@@ -781,6 +782,10 @@ public class GerritServer implements AutoCloseable {
     return MoreObjects.toStringHelper(this).addValue(desc).toString();
   }
 
+  /* N.B: This property relates to Vanilla Gerrit's notion of a replica
+   * and has no relation to Cirata replication. See 'Replica' in
+   * Documentation/glossary.txt for an explanation.
+   */
   public boolean isReplica() {
     return daemon.map(Daemon::isReplica).orElse(false);
   }

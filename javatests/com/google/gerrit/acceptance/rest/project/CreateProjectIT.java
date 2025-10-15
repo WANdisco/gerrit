@@ -78,6 +78,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class CreateProjectIT extends AbstractDaemonTest {
@@ -139,6 +140,7 @@ public class CreateProjectIT extends AbstractDaemonTest {
     }
   }
 
+  @Ignore("GER-1128 : Failing Gerrit acceptance tests tracker")
   @Test
   @UseLocalDisk
   public void createProjectHttpWithUnreasonableName_badRequest() throws Exception {

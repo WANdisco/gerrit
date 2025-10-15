@@ -20,6 +20,7 @@ import static org.eclipse.jgit.lib.Constants.OBJ_BLOB;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CharMatcher;
+import com.google.common.base.Strings;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.primitives.Ints;
 import com.google.gerrit.common.Nullable;
@@ -40,10 +41,20 @@ import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevWalk;
 
-/** An object blob in a Git repository that stores a single integer value. */
+/**
+ * An object blob in a Git repository that stores a single integer value.
+ * Cirata Note: We provide another interface that allows us to add a tag that will be stored as
+ * a tuple in the blob with the original number. On parsing we will discard the tag part and return the
+ * original number.
+ * <p>
+ * e.g. In our replicated use case when sequences numbers are stored from different originating nodes, we encode
+ * the NodeId along with the sequence number so that the object hashes are disambiguated.
+ */
 @AutoValue
 public abstract class IntBlob {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
+  public static final String SEQUENCE_TUPLE_DELIMITER = ":";
 
   public static Optional<IntBlob> parse(Repository repo, String refName) throws IOException {
     try (ObjectReader or = repo.newObjectReader()) {
@@ -70,7 +81,7 @@ public abstract class IntBlob {
       throw new IncorrectObjectTypeException(id, OBJ_BLOB);
     }
     String str = CharMatcher.whitespace().trimFrom(new String(ol.getCachedBytes(), UTF_8));
-    Integer value = Ints.tryParse(str);
+    Integer value = decodeTaggedInteger(str);
     if (value == null) {
       throw new StorageException("invalid value in " + refName + " blob at " + id.name());
     }
@@ -86,15 +97,48 @@ public abstract class IntBlob {
       int val,
       GitReferenceUpdated gitRefUpdated)
       throws IOException {
+    logger.atFine().log(
+        "storing value %d on %s in %s (oldId: %s)",
+        val, refName, projectName, oldId == null ? "null" : oldId.name());
+    return tryStoreImplementation(repo, rw, projectName, refName, oldId, Integer.toString(val), gitRefUpdated);
+  }
+
+  /**
+   * Overload that allows a tag to be supplied along with the value to store.
+   * The contents of the blob will then become a tuple of 'tag:value'
+   */
+  public static RefUpdate tryStore(
+      Repository repo,
+      RevWalk rw,
+      Project.NameKey projectName,
+      String refName,
+      @Nullable ObjectId oldId,
+      String tag,
+      int val,
+      GitReferenceUpdated gitRefUpdated)
+      throws IOException {
+    final String taggedVal = tagInteger(tag, val);
+    logger.atFine().log(
+        "storing tagged value %s on %s in %s (oldId: %s)",
+        taggedVal, refName, projectName, oldId == null ? "null" : oldId.name());
+    return tryStoreImplementation(repo, rw, projectName, refName, oldId, taggedVal, gitRefUpdated);
+  }
+
+  private static RefUpdate tryStoreImplementation(
+      Repository repo,
+      RevWalk rw,
+      Project.NameKey projectName,
+      String refName,
+      @Nullable ObjectId oldId,
+      String val,
+      GitReferenceUpdated gitRefUpdated)
+      throws IOException {
     ObjectId newId;
     try (ObjectInserter ins = repo.newObjectInserter()) {
-      logger.atFine().log(
-          "storing value %d on %s in %s (oldId: %s)",
-          val, refName, projectName, oldId == null ? "null" : oldId.name());
-      newId = ins.insert(OBJ_BLOB, Integer.toString(val).getBytes(UTF_8));
+      newId = ins.insert(OBJ_BLOB, val.getBytes(UTF_8));
       ins.flush();
       logger.atFine().log(
-          "successfully stored %d on %s as %s in %s", val, refName, newId.name(), projectName);
+          "successfully stored %s on %s as %s in %s", val, refName, newId.name(), projectName);
     }
     RefUpdate ru = repo.updateRef(refName);
     if (oldId != null) {
@@ -124,6 +168,34 @@ public abstract class IntBlob {
 
   private static boolean refUpdated(RefUpdate.Result result) {
     return result == RefUpdate.Result.NEW || result == RefUpdate.Result.FORCED;
+  }
+
+  /* Convert a given change sequence number into the content to store in the blob. For vanilla or non-replicated
+   * Gerrit this will just be the sequence number, but for replicated flow make a tuple incorporating node-id so that
+   * the blob sent to GitMS will hash differently. This will cause GitMS to differentiate sequence numbers coming from
+   * different nodes.
+   *
+   * NOTE: Do not to attempt to switch between replication on or off once installed without manually fixing
+   *  the sequence information.
+   */
+  private static String tagInteger(String tag, int val) {
+    // The format of the tuple in the replicated scenario will be NodeId:Sequence#.
+    return Strings.isNullOrEmpty(tag)
+        ? String.valueOf(val)
+        : String.format("%s%s%d", tag, SEQUENCE_TUPLE_DELIMITER, val);
+  }
+
+  /**
+   * Convert a sequenceString back into the expected sequence number. For vanilla or non-replicated Gerrit we only need
+   * parse the string as an int. For replicated flow we need to unpack the sequence number out of the encoded tuple.
+   * Note: This is public as it's also used to revert WD changes to sequences: {@link com.google.gerrit.pgm.wandisco.RevertRepoSequence}
+   */
+  public static Integer decodeTaggedInteger(String sequenceString) {
+    final int separatorIndex = sequenceString.lastIndexOf(SEQUENCE_TUPLE_DELIMITER);
+
+    return separatorIndex < 0 ?
+        Ints.tryParse(sequenceString) :
+        Ints.tryParse(sequenceString.substring(separatorIndex + SEQUENCE_TUPLE_DELIMITER.length()));
   }
 
   @VisibleForTesting

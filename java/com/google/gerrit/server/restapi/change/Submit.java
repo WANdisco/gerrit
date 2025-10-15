@@ -503,4 +503,11 @@ public class Submit
       return submit.apply(new RevisionResource(rsrc, ps), input);
     }
   }
+
+  /** Exception thrown when a submit command cannot be processed. */
+  public static class SubmitException extends RestApiException {
+    public SubmitException(String msg, Throwable cause) {
+      super(msg, cause);
+    }
+  }
 }
