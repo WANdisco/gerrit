@@ -5,3 +5,6 @@ To download the appropriate release, please visit the [GitHub releases](../../re
 N.B
 Default "master" branch is only an empty placeholder.
 
+## Archived
+This repository has now been made readonly, all further releases will be made at: 
+[BlueOptima Gerrit](https://www.github.com/blueoptimaltd/gerrit)
